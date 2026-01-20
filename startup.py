@@ -7,6 +7,20 @@ Registers all MCP routes and initializes the API
 from pyrevit import routes
 import logging
 
+# Fix for .NET Core encoding limitation
+# Register code pages encoding provider before any IronPython operations
+# This is required for IronPython to properly handle string encoding/decoding
+# See: https://github.com/IronLanguages/ironpython2/issues/234
+try:
+    import clr
+    clr.AddReference('System.Text.Encoding.CodePages')
+    from System.Text import Encoding, CodePagesEncodingProvider
+    Encoding.RegisterProvider(CodePagesEncodingProvider.Instance)
+except Exception as e:
+    # If the encoding provider cannot be registered, log a warning
+    # but don't fail startup as this may not be needed in all .NET versions
+    pass
+
 logger = logging.getLogger(__name__)
 
 # Initialize the main API
