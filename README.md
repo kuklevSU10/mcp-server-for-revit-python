@@ -110,7 +110,7 @@ pyRevit will start listening on port `http://localhost:48884/`
 
 1. Clone the repo in a custom location:
     ```bash
-    git clone https://github.com/JotaDeRodriguez/Bonsai_mcp
+    git clone https://github.com/revit-mcp/revit-mcp-python
     ```
 2. Add `.extension` to the root folder name
 3. In Revit, navigate to the pyRevit tab
