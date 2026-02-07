@@ -5,7 +5,7 @@ Contains all MCP route handlers organized by functionality
 """
 
 __version__ = "0.1.0"
-__author__ = "revit-mcp-python"
+__author__ = "mcp-server-for-revit-python"
 
 # Common imports that all modules might need
 import logging
