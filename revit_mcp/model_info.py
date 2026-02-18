@@ -282,7 +282,7 @@ def register_model_info_routes(api):
 
                         # Get load status
                         link_type = doc.GetElement(link_instance.GetTypeId())
-                        status = (
+                        status = normalize_string(
                             str(link_type.GetLinkedFileStatus()).split(".")[-1]
                             if link_type
                             else "Unknown"
