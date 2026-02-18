@@ -4,7 +4,7 @@ Placement Module for Revit MCP
 Handles family placement and element creation functionality
 """
 
-from utils import get_element_name, find_family_symbol_safely
+from utils import get_element_name, find_family_symbol_safely, normalize_string
 from pyrevit import routes, revit, DB
 import json
 import traceback
@@ -110,10 +110,10 @@ def register_placement_routes(api):
                     )
                     family_names = set()
                     for symbol in symbols[
-                        :50
+                        :200
                     ]:  # Limit to prevent overwhelming response
                         try:
-                            family_name_safe = get_element_name(symbol)
+                            family_name_safe = normalize_string(symbol.Family.Name)
                             family_names.add(family_name_safe)
                         except:
                             continue
@@ -302,10 +302,17 @@ def register_placement_routes(api):
                 data={"error": str(e), "traceback": error_trace}, status=500
             )
 
-    @api.route("/list_families/", methods=["GET"])
+    @api.route("/list_families/", methods=["POST"])
     def list_families(doc, request):
         """
-        Simplified: Get a flat list of up to 50 family names and their types in the current Revit model.
+        Get a flat list of family names and their types in the current Revit model.
+
+        Optional POST body:
+        {
+            "contains": "chair",   # case-insensitive substring filter on family or type name
+            "limit": 50            # max results (default 50)
+        }
+
         Returns:
             list: [{ 'family_name': str, 'type_name': str, 'category': str, 'is_active': bool }]
         """
@@ -315,21 +322,40 @@ def register_placement_routes(api):
                     data={"error": "No active Revit document"}, status=503
                 )
 
+            # Parse optional filter params from JSON body
+            contains_filter = None
+            limit = 50
+            if request and request.data:
+                try:
+                    body = json.loads(request.data) if isinstance(request.data, str) else request.data
+                    if isinstance(body, dict):
+                        contains_filter = body.get("contains")
+                        limit = int(body.get("limit", 50))
+                except Exception:
+                    pass
+
             symbols = (
                 DB.FilteredElementCollector(doc).OfClass(DB.FamilySymbol).ToElements()
             )
             families = []
             for symbol in symbols:
-                if len(families) >= 50:
+                if len(families) >= limit:
                     break
                 try:
-                    family_name = get_element_name(symbol)
-                    type_name = get_element_name(symbol)
+                    fam_name = normalize_string(symbol.Family.Name)
+                    type_name = normalize_string(get_element_name(symbol))
                     category = symbol.Category.Name if symbol.Category else "Unknown"
                     is_active = symbol.IsActive
+
+                    # Apply contains filter (case-insensitive, matches family or type name)
+                    if contains_filter:
+                        needle = normalize_string(contains_filter).lower()
+                        if needle not in fam_name.lower() and needle not in type_name.lower():
+                            continue
+
                     families.append(
                         {
-                            "family_name": family_name,
+                            "family_name": fam_name,
                             "type_name": type_name,
                             "category": category,
                             "is_active": is_active,
@@ -340,7 +366,8 @@ def register_placement_routes(api):
             return routes.make_response(
                 data={
                     "families": families,
-                    "truncated_total": len(families),
+                    "count": len(families),
+                    "filtered_by": contains_filter,
                     "status": "success",
                 }
             )

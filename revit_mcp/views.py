@@ -58,7 +58,7 @@ def register_views_routes(api):
             for view in all_views:
                 try:
                     # Use safe name access
-                    current_view_name = get_element_name(view)
+                    current_view_name = normalize_string(get_element_name(view))
                     if current_view_name == view_name:
                         target_view = view
                         break
@@ -71,7 +71,7 @@ def register_views_routes(api):
                 available_views = []
                 for view in all_views:
                     try:
-                        view_name_safe = get_element_name(view)
+                        view_name_safe = normalize_string(get_element_name(view))
                         # Filter out system views and templates
                         if (
                             hasattr(view, "IsTemplate")
@@ -238,7 +238,7 @@ def register_views_routes(api):
                     ):
                         continue
 
-                    view_name = get_element_name(view)
+                    view_name = normalize_string(get_element_name(view))
                     view_type = view.ViewType
 
                     # Categorize views
@@ -311,7 +311,7 @@ def register_views_routes(api):
 
             # Get basic view information
             view_info = {
-                "view_name": get_element_name(current_view),
+                "view_name": normalize_string(get_element_name(current_view)),
                 "view_type": str(current_view.ViewType),
                 "view_id": current_view.Id.IntegerValue,
                 "is_template": (
@@ -339,7 +339,7 @@ def register_views_routes(api):
                     current_view.GetTypeId()
                 )
                 if view_family_type:
-                    view_info["view_family_type"] = get_element_name(view_family_type)
+                    view_info["view_family_type"] = normalize_string(get_element_name(view_family_type))
                 else:
                     view_info["view_family_type"] = "Unknown"
             except Exception:
@@ -404,7 +404,7 @@ def register_views_routes(api):
                 try:
                     element_info = {
                         "element_id": elem.Id.IntegerValue,
-                        "name": get_element_name(elem),
+                        "name": normalize_string(get_element_name(elem)),
                         "element_type": elem.GetType().Name,
                     }
 
@@ -425,7 +425,7 @@ def register_views_routes(api):
                             level_id = level_param.AsElementId()
                             if level_id != DB.ElementId.InvalidElementId:
                                 level_elem = doc.GetElement(level_id)
-                                element_info["level"] = get_element_name(level_elem)
+                                element_info["level"] = normalize_string(get_element_name(level_elem))
                                 element_info["level_id"] = level_id.IntegerValue
                             else:
                                 element_info["level"] = None
@@ -489,7 +489,7 @@ def register_views_routes(api):
 
             result = {
                 "status": "success",
-                "view_name": get_element_name(current_view),
+                "view_name": normalize_string(get_element_name(current_view)),
                 "view_id": current_view.Id.IntegerValue,
                 "total_elements": len(elements_info),
                 "elements": elements_info,
