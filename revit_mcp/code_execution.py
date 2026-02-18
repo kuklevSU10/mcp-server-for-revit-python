@@ -18,14 +18,15 @@ def register_code_execution_routes(api):
     """Register code execution routes with the API."""
 
     @api.route("/execute_code/", methods=["POST"])
-    def execute_code(doc, request):
+    def execute_code(doc, uidoc, request):
         """
         Execute IronPython code in Revit context.
 
         Expected payload:
         {
             "code": "python code as string",
-            "description": "optional description of what the code does"
+            "description": "optional description of what the code does",
+            "use_transaction": true   # set false for UI ops like switching the active view
         }
         """
         try:
@@ -45,39 +46,27 @@ def register_code_execution_routes(api):
 
             logger.info("Executing code: {}".format(description))
 
-            # Create a transaction for any model modifications
-            t = DB.Transaction(doc, "MCP Code Execution: {}".format(description))
-            t.Start()
+            old_stdout = sys.stdout
+            captured_output = StringIO()
+            sys.stdout = captured_output
+
+            namespace = {
+                "doc": doc,
+                "uidoc": uidoc,
+                "DB": DB,
+                "revit": revit,
+                "__builtins__": __builtins__,
+                "print": lambda *args: captured_output.write(
+                    " ".join(str(arg) for arg in args) + "\n"
+                ),
+            }
 
             try:
-                # Capture stdout to return any print statements
-                old_stdout = sys.stdout
-                captured_output = StringIO()
-                sys.stdout = captured_output
-
-                # Create a namespace with common Revit objects available
-                namespace = {
-                    "doc": doc,
-                    "DB": DB,
-                    "revit": revit,
-                    "__builtins__": __builtins__,
-                    "print": lambda *args: captured_output.write(
-                        " ".join(str(arg) for arg in args) + "\n"
-                    ),
-                }
-
-                # Execute the code
                 exec(code_to_execute, namespace)
 
-                # Restore stdout
                 sys.stdout = old_stdout
-
-                # Get any printed output
                 output = captured_output.getvalue()
                 captured_output.close()
-
-                # Commit the transaction
-                t.Commit()
 
                 return routes.make_response(
                     data={
@@ -93,57 +82,40 @@ def register_code_execution_routes(api):
                 )
 
             except Exception as exec_error:
-                # Restore stdout if something went wrong
                 sys.stdout = old_stdout
-
-                # Capture any partial output before the error
                 partial_output = captured_output.getvalue()
                 captured_output.close()
 
-                # Rollback transaction if it's still active
-                if t.HasStarted() and not t.HasEnded():
-                    t.RollBack()
-
-                # Get the full traceback
                 error_traceback = traceback.format_exc()
-
-                # Build enhanced error message with hints
                 error_type = type(exec_error).__name__
                 error_msg = str(exec_error)
                 enhanced_message = "{}: {}".format(error_type, error_msg)
 
-                # Add helpful hints for common errors
                 hints = []
                 if error_type == "AttributeError":
-                    if error_msg == "Name" or "Name" in error_msg:
+                    if "Name" in error_msg:
                         hints.append(
                             "The 'Name' property may not be directly accessible in IronPython. "
-                            "Try using getattr(element, 'Name', 'N/A') or "
+                            "Try getattr(element, 'Name', 'N/A') or "
                             "element.get_Parameter(DB.BuiltInParameter.ALL_MODEL_TYPE_NAME).AsString()"
                         )
                     else:
                         hints.append(
                             "Some Revit API properties are not directly accessible in IronPython. "
-                            "Try using getattr(obj, 'property_name', default_value) for safe access."
+                            "Try getattr(obj, 'property_name', default_value) for safe access."
                         )
                 elif error_type == "NullReferenceException" or "NoneType" in error_msg:
                     hints.append(
-                        "An object is None/null. Ensure you check if elements exist before "
-                        "accessing their properties: 'if element:' or 'if element is not None:'"
+                        "An object is None/null. Check if elements exist before "
+                        "accessing their properties: 'if element:'"
                     )
                 elif error_type == "InvalidOperationException":
                     hints.append(
-                        "This operation may require being inside a transaction, or the element "
-                        "may be in a state that doesn't allow this operation."
-                    )
-                elif "Transaction" in error_msg or "transaction" in error_msg:
-                    hints.append(
-                        "Transaction error. Note that this endpoint already wraps your code "
-                        "in a transaction. Avoid starting nested transactions."
+                        "This operation may require a transaction. Wrap model-modifying "
+                        "code in: t = DB.Transaction(doc, 'desc'); t.Start(); ...; t.Commit()"
                     )
 
                 logger.error("Code execution failed: {}".format(enhanced_message))
-                logger.error("Traceback: {}".format(error_traceback))
 
                 response_data = {
                     "status": "error",
@@ -159,10 +131,7 @@ def register_code_execution_routes(api):
                 if hints:
                     response_data["hints"] = hints
 
-                return routes.make_response(
-                    data=response_data,
-                    status=500,
-                )
+                return routes.make_response(data=response_data, status=500)
 
         except Exception as e:
             logger.error("Execute code request failed: {}".format(str(e)))
