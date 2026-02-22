@@ -69,6 +69,10 @@ async def _revit_call(method: str, endpoint: str, data: Dict = None, ctx: Contex
 from tools import register_tools
 register_tools(mcp, revit_get, revit_post, revit_image)
 
+# Register custom tender tools (SU-10 Analytics)
+from custom_tools import register_custom_tools
+register_custom_tools(mcp, revit_get, revit_post, revit_image)
+
 
 async def run_combined_async():
     """Run server with both SSE and streamable-http endpoints.
