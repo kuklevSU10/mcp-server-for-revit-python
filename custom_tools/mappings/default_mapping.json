@@ -1,0 +1,90 @@
+{
+  "description": "Default BIM to VOR mapping for residential building",
+  "positions": [
+    {
+      "vor_id": "1.1",
+      "name": "Earthworks",
+      "unit": "m3",
+      "bim_category": null,
+      "bim_filter": null,
+      "manual_volume": null,
+      "note": "Manual input required — no BIM geometry"
+    },
+    {
+      "vor_id": "2.1",
+      "name": "Monolithic concrete foundations",
+      "unit": "m3",
+      "bim_category": "Floors",
+      "bim_filter": {"type_contains": "Foundation"},
+      "manual_volume": null
+    },
+    {
+      "vor_id": "2.2",
+      "name": "Monolithic concrete walls",
+      "unit": "m3",
+      "bim_category": "Walls",
+      "bim_filter": {"type_contains": "Concrete"},
+      "manual_volume": null
+    },
+    {
+      "vor_id": "2.3",
+      "name": "Monolithic concrete floor slabs",
+      "unit": "m3",
+      "bim_category": "Floors",
+      "bim_filter": {"type_contains": "Slab"},
+      "manual_volume": null
+    },
+    {
+      "vor_id": "3.1",
+      "name": "Exterior brick masonry",
+      "unit": "m3",
+      "bim_category": "Walls",
+      "bim_filter": {"type_contains": "Brick"},
+      "manual_volume": null
+    },
+    {
+      "vor_id": "3.2",
+      "name": "Interior partition walls",
+      "unit": "m2",
+      "bim_category": "Walls",
+      "bim_filter": {"type_contains": "Partition"},
+      "use_area": true,
+      "manual_volume": null
+    },
+    {
+      "vor_id": "4.1",
+      "name": "Roof structure",
+      "unit": "m2",
+      "bim_category": "Roofs",
+      "bim_filter": null,
+      "use_area": true,
+      "manual_volume": null
+    },
+    {
+      "vor_id": "5.1",
+      "name": "Door installation",
+      "unit": "item",
+      "bim_category": "Doors",
+      "bim_filter": null,
+      "use_count": true,
+      "manual_volume": null
+    },
+    {
+      "vor_id": "5.2",
+      "name": "Window installation",
+      "unit": "item",
+      "bim_category": "Windows",
+      "bim_filter": null,
+      "use_count": true,
+      "manual_volume": null
+    },
+    {
+      "vor_id": "6.1",
+      "name": "Structural columns",
+      "unit": "m3",
+      "bim_category": "Columns",
+      "bim_filter": null,
+      "manual_volume": null
+    }
+  ]
+}
