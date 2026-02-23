@@ -3,6 +3,7 @@
 import json
 from datetime import datetime
 from mcp.server.fastmcp import Context
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
 
 _MODEL_INFO_CODE = (
     "import json\n"
@@ -26,8 +27,8 @@ _VOLUMES_CODE = (
     "    'Doors': DB.BuiltInCategory.OST_Doors,\n"
     "    'Windows': DB.BuiltInCategory.OST_Windows,\n"
     "}\n"
-    "FT3_TO_M3 = 0.0283168\n"
-    "FT2_TO_M2 = 0.092903\n"
+    "FT3_TO_M3 = 0.028316846592\n"
+    "FT2_TO_M2 = 0.09290304\n"
     "result = {}\n"
     "for cat_name, bic in CAT_MAP.items():\n"
     "    elems = DB.FilteredElementCollector(doc).OfCategory(bic)"

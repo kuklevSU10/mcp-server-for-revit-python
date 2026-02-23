@@ -2,6 +2,7 @@
 """BIM model audit tool — checks for common modeling issues."""
 import json
 from mcp.server.fastmcp import Context
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
 
 _ZERO_VOLUME_CODE = (
     "import json\n"
@@ -49,28 +50,35 @@ _MISSING_LEVEL_CODE = (
 
 _DUPLICATE_CODE = (
     "import json\n"
-    "elems = DB.FilteredElementCollector(doc)"
-    ".WhereElementIsNotElementType().ToElements()\n"
+    "AUDIT_CATS = [\n"
+    "    DB.BuiltInCategory.OST_Walls,\n"
+    "    DB.BuiltInCategory.OST_Floors,\n"
+    "    DB.BuiltInCategory.OST_StructuralColumns,\n"
+    "    DB.BuiltInCategory.OST_StructuralFraming,\n"
+    "]\n"
     "seen = {}\n"
     "issues = []\n"
-    "for elem in elems:\n"
-    "    if not elem.Location:\n"
-    "        continue\n"
-    "    type_id = elem.GetTypeId().IntegerValue\n"
-    "    loc = elem.Location\n"
-    "    key = None\n"
-    "    if hasattr(loc, 'Point'):\n"
-    "        pt = loc.Point\n"
-    "        key = (type_id, round(pt.X, 2), round(pt.Y, 2), round(pt.Z, 2))\n"
-    "    if key:\n"
-    "        if key in seen:\n"
-    "            issues.append({'type': 'duplicate_elements',"
+    "for bic in AUDIT_CATS:\n"
+    "    elems = DB.FilteredElementCollector(doc).OfCategory(bic)"
+    ".WhereElementIsNotElementType().ToElements()\n"
+    "    for elem in elems:\n"
+    "        if not elem.Location:\n"
+    "            continue\n"
+    "        type_id = elem.GetTypeId().IntegerValue\n"
+    "        loc = elem.Location\n"
+    "        key = None\n"
+    "        if hasattr(loc, 'Point'):\n"
+    "            pt = loc.Point\n"
+    "            key = (type_id, round(pt.X, 2), round(pt.Y, 2), round(pt.Z, 2))\n"
+    "        if key:\n"
+    "            if key in seen:\n"
+    "                issues.append({'type': 'duplicate_elements',"
     " 'element_id': elem.Id.IntegerValue,"
     " 'duplicate_of': seen[key],"
     " 'description': 'Possible duplicate element at same location and type'})\n"
-    "        else:\n"
-    "            seen[key] = elem.Id.IntegerValue\n"
-    "print(json.dumps(issues[:50]))\n"
+    "            else:\n"
+    "                seen[key] = elem.Id.IntegerValue\n"
+    "print(json.dumps(issues[:200]))\n"
 )
 
 

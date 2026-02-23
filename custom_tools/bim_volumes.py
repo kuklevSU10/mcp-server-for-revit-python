@@ -2,6 +2,7 @@
 """BIM volumes extraction tool for tender analysis."""
 import json
 from mcp.server.fastmcp import Context
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
 
 
 def register_bim_volumes_tools(mcp_server, revit_get, revit_post, revit_image):
@@ -37,8 +38,8 @@ def register_bim_volumes_tools(mcp_server, revit_get, revit_post, revit_image):
             "}\n"
             "categories = " + cats_repr + "\n"
             "group_by = " + group_repr + "\n"
-            "FT3_TO_M3 = 0.0283168\n"
-            "FT2_TO_M2 = 0.092903\n"
+            "FT3_TO_M3 = 0.028316846592\n"
+            "FT2_TO_M2 = 0.09290304\n"
             "result = {}\n"
             "for cat_name in categories:\n"
             "    if cat_name not in CAT_MAP:\n"
