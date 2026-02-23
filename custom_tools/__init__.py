@@ -17,6 +17,11 @@ from .vor_vs_bim import register_vor_vs_bim_tools
 from .bim_vor_generate import register_bim_vor_generate_tools
 from .bim_query import register_bim_query_tools
 from .bim_vor_to_sheets import register_bim_vor_to_sheets_tools
+# Navisworks MCP integration (port 48885)
+from .navisworks_status import register_navisworks_status_tools
+from .navisworks_clash import register_navisworks_clash_tools
+from .navisworks_volumes import register_navisworks_volumes_tools
+from .navisworks_aggregate import register_navisworks_aggregate_tools
 
 
 def register_custom_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func):
@@ -38,3 +43,8 @@ def register_custom_tools(mcp_server, revit_get_func, revit_post_func, revit_ima
     register_bim_vor_generate_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)
     register_bim_query_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)
     register_bim_vor_to_sheets_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)
+    # Navisworks tools (independent of Revit — use port 48885)
+    register_navisworks_status_tools(mcp_server)
+    register_navisworks_clash_tools(mcp_server)
+    register_navisworks_volumes_tools(mcp_server)
+    register_navisworks_aggregate_tools(mcp_server)
