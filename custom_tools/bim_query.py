@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """BIM Query — natural-language search for BIM elements via semantic patterns."""
 import json
+import os
 import re
 from mcp.server.fastmcp import Context
 
@@ -91,6 +92,73 @@ def _extract_diameter_filter(query_lower):
     return int(m.group(1)) if m else None
 
 
+# ---------------------------------------------------------------------------
+# AI interpretation layer (GPT-4o-mini structured extraction)
+# ---------------------------------------------------------------------------
+
+async def _ai_interpret_query(query: str) -> dict:
+    """Use OpenAI GPT-4o-mini to extract structured BIM intent from NL query.
+
+    Returns dict: {category, level_filter, keywords, intent, confidence}.
+    Returns None if API key missing or call fails (triggers keyword fallback).
+    """
+    api_key = os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        key_file = os.path.join(os.path.dirname(__file__), "..", ".openai_key")
+        if os.path.exists(key_file):
+            with open(key_file, "r", encoding="utf-8") as fk:
+                api_key = fk.read().strip()
+    if not api_key:
+        return None  # no key → keyword fallback
+
+    try:
+        import openai  # optional dep; already in project env
+        client = openai.AsyncOpenAI(api_key=api_key)
+
+        system_msg = (
+            "You are a BIM assistant. Extract structured info from queries about "
+            "building elements. Categories (use exact name): Walls/Floors/Roofs/"
+            "Doors/Windows/Stairs/Ramps/Ceilings/StructuralColumns/StructuralFraming/"
+            "StructuralFoundation/Pipes/Ducts/CableTray/Furniture/"
+            "MechanicalEquipment/LightingFixtures/ElectricalEquipment/Rooms. "
+            "Respond ONLY with valid JSON matching the schema."
+        )
+
+        schema = {
+            "type": "object",
+            "properties": {
+                "category":     {"type": "string"},
+                "level_filter": {"type": "string"},
+                "keywords":     {"type": "array", "items": {"type": "string"}},
+                "intent":       {"type": "string", "enum": ["list", "count", "volume", "filter"]},
+                "confidence":   {"type": "number"},
+            },
+            "required": ["category", "level_filter", "keywords", "intent", "confidence"],
+            "additionalProperties": False,
+        }
+
+        resp = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user",   "content": "Query: " + query},
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "bim_query_interpretation",
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+            temperature=0,
+            max_tokens=256,
+        )
+        return json.loads(resp.choices[0].message.content)
+    except Exception:
+        return None  # any failure → keyword fallback
+
+
 def register_bim_query_tools(mcp_server, revit_get, revit_post, revit_image):
     """Register bim_query NL search tool."""
 
@@ -117,20 +185,32 @@ def register_bim_query_tools(mcp_server, revit_get, revit_post, revit_image):
 
         query_lower = query.lower().strip()
 
-        # --- Extract category ---
-        category = _extract_category_from_query(query_lower)
+        # --- Try AI interpretation first ---
+        ai_result = await _ai_interpret_query(query)
+        interpreted_by = "keyword"
 
-        # --- Semantic pattern match ---
+        if ai_result and ai_result.get("category"):
+            # AI succeeded — use its category and level
+            category = ai_result["category"]
+            level_filter = ai_result.get("level_filter", "")
+            ai_keywords = ai_result.get("keywords", [])
+            interpreted_by = "ai"
+        else:
+            # Keyword fallback
+            category = _extract_category_from_query(query_lower)
+            level_filter = _extract_level_from_query(query_lower)
+            ai_keywords = []
+
+        # --- Semantic pattern match (always run for extra keywords) ---
         pattern_id = _match_vor_name_to_pattern(query_lower, patterns)
-        keywords = []
+        keywords = ai_keywords
         matched_pattern = None
         if pattern_id:
             matched_pattern = next((p for p in patterns if p.get('id') == pattern_id), None)
-            if matched_pattern:
+            if matched_pattern and not keywords:
                 keywords = matched_pattern.get('keywords', [])[:5]
 
-        # --- Extract structural filters from query ---
-        level_filter = _extract_level_from_query(query_lower)
+        # --- Extract structural filters (height/diameter always from regex) ---
         height_op, height_val = _extract_height_filter(query_lower)
         diameter = _extract_diameter_filter(query_lower)
 
@@ -174,13 +254,15 @@ def register_bim_query_tools(mcp_server, revit_get, revit_post, revit_image):
         return {
             "query": query,
             "interpreted": {
-                "category":   category,
-                "pattern_id": pattern_id,
+                "category":      category,
+                "pattern_id":    pattern_id,
                 "pattern_label": matched_pattern.get("label") if matched_pattern else None,
-                "filters":    filters,
-                "level":      level_filter,
-                "height":     {"op": height_op, "value": height_val} if height_op else None,
-                "diameter_mm": diameter,
+                "filters":       filters,
+                "level":         level_filter,
+                "height":        {"op": height_op, "value": height_val} if height_op else None,
+                "diameter_mm":   diameter,
+                "interpreted_by": interpreted_by,
+                "ai_confidence": ai_result.get("confidence") if ai_result else None,
             },
             "results": results,
         }
