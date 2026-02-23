@@ -53,3 +53,13 @@ for mod_name, func_name in modules:
         traceback.print_exc()
 
 print("revit-mcp: startup complete")
+
+# Verify routes were registered
+try:
+    from pyrevit.routes.server import router as _router
+    _routes = _router.get_routes("revit_mcp")
+    print("revit-mcp: {} routes registered in revit_mcp".format(len(_routes)))
+    for _r in _routes:
+        print("  -> {} {}".format(_r.method, _r.pattern))
+except Exception as _e:
+    print("revit-mcp: route verify error: {}".format(_e))
