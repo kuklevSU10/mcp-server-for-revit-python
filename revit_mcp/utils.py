@@ -38,12 +38,37 @@ def normalize_string(text):
 def get_element_name(element):
     """
     Get the name of a Revit element.
-    Useful for both FamilySymbol and other elements.
+    Tries multiple approaches for maximum IronPython 2 compatibility.
     """
+    # Attempt 1: direct .Name property (works for most element types)
     try:
-        return element.Name
-    except AttributeError:
+        n = element.Name
+        if n is not None:
+            return n
+    except Exception:
+        pass
+    # Attempt 2: VIEW_NAME parameter (works for View subclasses)
+    try:
+        p = element.get_Parameter(DB.BuiltInParameter.VIEW_NAME)
+        if p and p.HasValue:
+            v = p.AsString()
+            if v:
+                return v
+    except Exception:
+        pass
+    # Attempt 3: DB.Element.Name descriptor
+    try:
         return DB.Element.Name.__get__(element)
+    except Exception:
+        pass
+    # Attempt 4: SYMBOL_NAME_PARAM (for ElementType subclasses)
+    try:
+        p = element.get_Parameter(DB.BuiltInParameter.SYMBOL_NAME_PARAM)
+        if p and p.HasValue:
+            return p.AsString()
+    except Exception:
+        pass
+    return u"Unknown"
 
 
 def find_family_symbol_safely(doc, target_family_name, target_type_name=None):
