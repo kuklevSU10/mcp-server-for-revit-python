@@ -113,11 +113,11 @@ def register_model_info_routes(api):
                 for level in levels_collector:
                     level_name = get_element_name(level)
                     try:
-                        elevation = level.Elevation
+                        elevation = level.Elevation * 0.3048
                         levels_info.append(
                             {
                                 "name": normalize_string(level_name),
-                                "elevation": round(elevation, 2),
+                                "elevation": round(elevation, 3),
                             }
                         )
                     except:
@@ -202,7 +202,7 @@ def register_model_info_routes(api):
 
                         if is_placed:
                             try:
-                                room_info["area"] = round(area, 2)
+                                room_info["area"] = round(area * 0.09290304, 3)
                             except:
                                 room_info["area"] = "Unknown"
 

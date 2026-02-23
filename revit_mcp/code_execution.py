@@ -68,6 +68,10 @@ def register_code_execution_routes(api):
                 output = captured_output.getvalue()
                 captured_output.close()
 
+                MAX_OUTPUT_SIZE = 1000000
+                if len(output) > MAX_OUTPUT_SIZE:
+                    output = output[:MAX_OUTPUT_SIZE] + '\n[OUTPUT TRUNCATED: exceeded 1MB]'
+
                 return routes.make_response(
                     data={
                         "status": "success",

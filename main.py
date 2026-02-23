@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys
-import httpx
+import asyncio
+import requests as _requests
 import anyio
 from mcp.server.fastmcp import FastMCP, Image, Context
 import base64
@@ -33,34 +34,37 @@ async def revit_post(endpoint: str, data: Dict[str, Any], ctx: Context = None, *
 
 
 async def revit_image(endpoint: str, ctx: Context = None) -> Union[Image, str]:
-    """GET request that returns an Image object"""
+    """GET request that returns an Image object."""
+    def _do():
+        response = _requests.get(f"{BASE_URL}{endpoint}", timeout=60.0)
+        if response.status_code == 200:
+            img_data = base64.b64decode(response.json()["image_data"])
+            return ("image", img_data)
+        return ("error", f"Error: {response.status_code} - {response.text}")
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(f"{BASE_URL}{endpoint}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                image_bytes = base64.b64decode(data["image_data"])
-                return Image(data=image_bytes, format="png")
-            else:
-                return f"Error: {response.status_code} - {response.text}"
+        kind, payload = await asyncio.to_thread(_do)
+        if kind == "image":
+            return Image(data=payload, format="png")
+        return payload
     except Exception as e:
         return f"Error: {e}"
 
 
-async def _revit_call(method: str, endpoint: str, data: Dict = None, ctx: Context = None, 
-                     timeout: float = 30.0, params: Dict = None) -> Union[Dict, str]:
-    """Internal function handling all HTTP calls"""
+async def _revit_call(method: str, endpoint: str, data: Dict = None, ctx: Context = None,
+                      timeout: float = 30.0, params: Dict = None) -> Union[Dict, str]:
+    """Internal function — uses requests via thread to avoid httpx/pyRevit incompatibility."""
+    def _do():
+        url = f"{BASE_URL}{endpoint}"
+        if method == "GET":
+            r = _requests.get(url, params=params, timeout=timeout)
+        else:
+            r = _requests.post(url, json=data,
+                               headers={"Content-Type": "application/json"},
+                               timeout=timeout)
+        return r
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            url = f"{BASE_URL}{endpoint}"
-            
-            if method == "GET":
-                response = await client.get(url, params=params)
-            else:  # POST
-                response = await client.post(url, json=data, headers={"Content-Type": "application/json"})
-            
-            return response.json() if response.status_code == 200 else f"Error: {response.status_code} - {response.text}"
+        response = await asyncio.to_thread(_do)
+        return response.json() if response.status_code == 200 else f"Error: {response.status_code} - {response.text}"
     except Exception as e:
         return f"Error: {e}"
 

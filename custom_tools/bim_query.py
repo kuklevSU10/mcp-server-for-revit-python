@@ -115,14 +115,13 @@ def register_bim_query_tools(mcp_server, revit_get, revit_post, revit_image):
         if not patterns:
             return {"error": "Could not load global_patterns.json", "path": PATTERNS_PATH}
 
-        reverse_index = _build_reverse_index(patterns)
         query_lower = query.lower().strip()
 
         # --- Extract category ---
         category = _extract_category_from_query(query_lower)
 
         # --- Semantic pattern match ---
-        pattern_id = _match_vor_name_to_pattern(query_lower, reverse_index)
+        pattern_id = _match_vor_name_to_pattern(query_lower, patterns)
         keywords = []
         matched_pattern = None
         if pattern_id:
