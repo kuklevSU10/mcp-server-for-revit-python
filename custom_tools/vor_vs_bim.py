@@ -94,6 +94,76 @@ def _build_id_to_unit(patterns):
     return {p['id']: p.get('unit', 'count') for p in patterns if 'id' in p}
 
 
+# Cache for semantic matching results: (vor_name, frozenset(bim_labels)) -> matched_label
+_SEMANTIC_CACHE = {}
+
+
+def _semantic_match_vor_to_bim(vor_name: str, bim_categories: list) -> str:
+    """Find the closest BIM category for a VOR position name via embeddings.
+
+    Uses OpenAI text-embedding-3-small + cosine similarity.
+    Caches results in _SEMANTIC_CACHE to avoid repeated API calls.
+    Falls back to keyword matching if OpenAI is unavailable.
+
+    Args:
+        vor_name: VOR position name, e.g. "Кладка кирпичная наружная толщ. 510мм"
+        bim_categories: list of BIM label strings to match against
+
+    Returns:
+        Best matching label from bim_categories, or None if no match found
+    """
+    if not bim_categories:
+        return None
+
+    cache_key = (vor_name, tuple(sorted(bim_categories)))
+    if cache_key in _SEMANTIC_CACHE:
+        return _SEMANTIC_CACHE[cache_key]
+
+    result = None
+
+    try:
+        import math
+        import openai
+
+        def _cosine(a, b):
+            dot = sum(x * y for x, y in zip(a, b))
+            mag_a = math.sqrt(sum(x * x for x in a))
+            mag_b = math.sqrt(sum(x * x for x in b))
+            return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
+
+        client = openai.OpenAI()
+        texts = [vor_name] + list(bim_categories)
+        response = client.embeddings.create(model="text-embedding-3-small", input=texts)
+        embeddings = [r.embedding for r in response.data]
+
+        vor_emb = embeddings[0]
+        cat_embs = embeddings[1:]
+
+        best_idx = max(range(len(cat_embs)), key=lambda i: _cosine(vor_emb, cat_embs[i]))
+        best_sim = _cosine(vor_emb, cat_embs[best_idx])
+
+        # Accept only if similarity exceeds minimum threshold
+        if best_sim > 0.30:
+            result = bim_categories[best_idx]
+
+    except Exception:
+        # Fallback: simple keyword overlap with BIM category names
+        vor_lower = vor_name.lower()
+        best_cat = None
+        best_score = 0
+        for cat in bim_categories:
+            words = [w for w in cat.lower().split() if len(w) > 3]
+            score = sum(1 for w in words if w in vor_lower)
+            if score > best_score:
+                best_score = score
+                best_cat = cat
+        if best_score > 0:
+            result = best_cat
+
+    _SEMANTIC_CACHE[cache_key] = result
+    return result
+
+
 async def _fetch_bim_summary(revit_post, ctx):
     """Fetch bim_summary data (all semantic groups) from Revit model."""
     from ._constants import ALL_CATEGORIES, CAT_BATCHES
@@ -259,14 +329,14 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
     async def vor_vs_bim(
         vor_data: str = "[]",
         vor_file: str = "",
-        tolerance: float = 3.0,
+        tolerance_pct: float = 3.0,
         ctx: Context = None,
     ) -> dict:
         """Compare client VOR volumes with BIM model using semantic matching.
 
         vor_data: JSON string: [{"name": "Кирпичная кладка", "unit": "м3", "volume": 456.7}, ...]
         vor_file: path to .xlsx/.xls file with VOR table (takes priority over vor_data)
-        tolerance: percentage threshold for red flags (default 3.0%)
+        tolerance_pct: acceptable deviation % (default 3.0, strict mode use 1.0)
         Returns: {matches, red_flags, missing_in_vor, summary}
         """
         # --- Resolve VOR items source ---
@@ -333,6 +403,14 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
                     "bim_types": [b.get("type", "") for b in grp.get("breakdown", [])[:5]],
                 }
 
+        # Build reverse label->pid lookup for semantic fallback
+        labels_to_pid = {
+            bim_entry["label"]: pid
+            for pid, bim_entry in id_to_bim.items()
+            if bim_entry.get("label")
+        }
+        bim_label_list = list(labels_to_pid.keys())
+
         # Match VOR items to BIM semantic groups
         matches = []
         red_flags = []
@@ -344,7 +422,17 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
             unit = item.get("unit", "")
             name_lower = name.lower().strip()
 
+            # Step 1: keyword matching
             pattern_id = _match_vor_name_to_pattern(name_lower, patterns_sorted)
+            match_method = "keyword" if pattern_id else "none"
+
+            # Step 2: semantic fallback when keyword matching fails
+            if pattern_id is None and bim_label_list:
+                best_label = _semantic_match_vor_to_bim(name, bim_label_list)
+                if best_label and best_label in labels_to_pid:
+                    pattern_id = labels_to_pid[best_label]
+                    match_method = "semantic"
+
             bim_entry = id_to_bim.get(pattern_id) if pattern_id else None
 
             bim_vol = None
@@ -359,6 +447,7 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
                 "bim_volume":      bim_vol,
                 "matched_pattern": pattern_id,
                 "bim_label":       bim_entry["label"] if bim_entry else None,
+                "match_method":    match_method,
             }
 
             if bim_vol is None:
@@ -371,7 +460,7 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
             else:
                 diff_pct = abs(vor_vol - bim_vol) / vor_vol * 100
                 entry["diff_pct"] = round(diff_pct, 2)
-                if diff_pct > tolerance:
+                if diff_pct > tolerance_pct:
                     entry["status"] = "red_flag"
                     red_flags.append(entry)
                 else:
@@ -414,7 +503,7 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
                 "red_flags":      len(red_flags),
                 "no_match":       len([m for m in matches if m.get("status") == "no_bim_match"]),
                 "missing":        len(missing_in_vor),
-                "tolerance_pct":  tolerance,
+                "tolerance_pct":  tolerance_pct,
                 "patterns_loaded": len(patterns),
                 "source":         "excel:" + vor_file if vor_file else "json",
             },
@@ -423,14 +512,14 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
     @mcp_server.tool()
     async def vor_vs_bim_file(
         vor_file: str,
-        tolerance: float = 3.0,
+        tolerance_pct: float = 3.0,
         ctx: Context = None,
     ) -> dict:
         """Load VOR from Excel file and compare with BIM model.
 
         Convenience wrapper around vor_vs_bim — just pass the path to the .xlsx file.
         vor_file: absolute or relative path to Excel file with VOR table
-        tolerance: percentage threshold for red flags (default 3.0%)
+        tolerance_pct: acceptable deviation % (default 3.0, strict mode use 1.0)
         Returns: {matches, red_flags, missing_in_vor, summary}
 
         Excel format: the tool auto-detects columns for name/unit/volume.
@@ -443,7 +532,7 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
         return await vor_vs_bim(
             vor_data="[]",
             vor_file=vor_file,
-            tolerance=tolerance,
+            tolerance_pct=tolerance_pct,
             ctx=ctx,
         )
 
