@@ -36,7 +36,7 @@ async def revit_post(endpoint: str, data: Dict[str, Any], ctx: Context = None, *
 async def revit_image(endpoint: str, ctx: Context = None) -> Union[Image, str]:
     """GET request that returns an Image object."""
     def _do():
-        response = _requests.get(f"{BASE_URL}{endpoint}", timeout=60.0)
+        response = _requests.get(f"{BASE_URL}{endpoint}", timeout=120.0)
         if response.status_code == 200:
             img_data = base64.b64decode(response.json()["image_data"])
             return ("image", img_data)
@@ -51,7 +51,7 @@ async def revit_image(endpoint: str, ctx: Context = None) -> Union[Image, str]:
 
 
 async def _revit_call(method: str, endpoint: str, data: Dict = None, ctx: Context = None,
-                      timeout: float = 30.0, params: Dict = None) -> Union[Dict, str]:
+                      timeout: float = 600.0, params: Dict = None) -> Union[Dict, str]:
     """Internal function — uses requests via thread to avoid httpx/pyRevit incompatibility."""
     def _do():
         url = f"{BASE_URL}{endpoint}"

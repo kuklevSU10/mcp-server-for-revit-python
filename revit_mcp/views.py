@@ -37,12 +37,24 @@ def register_views_routes(api):
                     data={"error": "No active Revit document"}, status=503
                 )
 
-            # URL-decode view name (bottle may not decode path vars in older versions)
+            # URL-decode view name with proper UTF-8 handling
+            # IronPython 2: urllib.unquote(unicode) uses latin-1 by default -> broken Cyrillic
+            # Fix: encode to ASCII, unquote to bytes, then decode as UTF-8
             try:
                 from urllib import unquote as _unquote  # IronPython 2
+                if isinstance(view_name, unicode):
+                    # percent-encoded unicode: encode to ASCII, unquote bytes, decode UTF-8
+                    _bytes = _unquote(view_name.encode('ascii', 'replace'))
+                    view_name = _bytes.decode('utf-8') if isinstance(_bytes, str) else _bytes
+                else:
+                    _bytes = _unquote(view_name)
+                    if isinstance(_bytes, str):
+                        view_name = _bytes.decode('utf-8', 'replace')
+                    else:
+                        view_name = _bytes
             except ImportError:
                 from urllib.parse import unquote as _unquote  # Python 3
-            view_name = _unquote(view_name)
+                view_name = _unquote(view_name)
             # Normalize the view name
             view_name = normalize_string(view_name)
             logger.info("Exporting view: {}".format(view_name))
