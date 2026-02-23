@@ -36,18 +36,14 @@ modules = [
     ("revit_mcp.code_execution", "register_code_execution_routes"),
 ]
 
+# Clear cached submodules once before importing (so fresh code is picked up)
+import sys as _sys
+for _key in list(_sys.modules.keys()):
+    if _key == "revit_mcp" or _key.startswith("revit_mcp."):
+        del _sys.modules[_key]
+
 for mod_name, func_name in modules:
     try:
-        # Force fresh import by clearing cached module (fixes state after failed reload)
-        import sys as _sys
-        for _cached in list(_sys.modules.keys()):
-            if _cached == mod_name or _cached.startswith(mod_name + "."):
-                del _sys.modules[_cached]
-        # Also clear parent package if needed
-        parent = mod_name.rsplit(".", 1)[0]
-        if parent != mod_name and parent in _sys.modules:
-            del _sys.modules[parent]
-
         mod = __import__(mod_name, fromlist=[func_name])
         func = getattr(mod, func_name)
         func(api)
