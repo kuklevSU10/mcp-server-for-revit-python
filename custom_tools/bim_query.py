@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
 """BIM Query — natural-language search for BIM elements via semantic patterns."""
 import json
+import logging
 import os
 import re
 from mcp.server.fastmcp import Context
+
+logger = logging.getLogger(__name__)
+
+# In-memory cache: query_string -> AI interpretation dict
+_AI_CACHE: dict = {}
 
 # Re-use pattern helpers from vor_vs_bim
 from .vor_vs_bim import (
@@ -101,7 +107,14 @@ async def _ai_interpret_query(query: str) -> dict:
 
     Returns dict: {category, level_filter, keywords, intent, confidence}.
     Returns None if API key missing or call fails (triggers keyword fallback).
+    Uses in-memory cache to avoid redundant API calls.
     """
+    # Check cache first
+    cache_key = query.strip().lower()
+    if cache_key in _AI_CACHE:
+        logger.debug("AI cache hit for query: %r", query)
+        return _AI_CACHE[cache_key]
+
     api_key = os.environ.get("OPENAI_API_KEY", "")
     if not api_key:
         key_file = os.path.join(os.path.dirname(__file__), "..", ".openai_key")
@@ -154,8 +167,11 @@ async def _ai_interpret_query(query: str) -> dict:
             temperature=0,
             max_tokens=256,
         )
-        return json.loads(resp.choices[0].message.content)
-    except Exception:
+        result = json.loads(resp.choices[0].message.content)
+        _AI_CACHE[cache_key] = result  # store in cache
+        return result
+    except Exception as exc:
+        logger.warning("AI interpretation failed: %s", exc)
         return None  # any failure → keyword fallback
 
 
@@ -195,9 +211,16 @@ def register_bim_query_tools(mcp_server, revit_get, revit_post, revit_image):
             level_filter = ai_result.get("level_filter", "")
             ai_keywords = ai_result.get("keywords", [])
             interpreted_by = "ai"
+            logger.info(
+                "AI interpreted: category=%s, level=%r, intent=%s, confidence=%.2f",
+                category, level_filter,
+                ai_result.get("intent", "?"),
+                ai_result.get("confidence", 0.0),
+            )
         else:
             # Keyword fallback
             category = _extract_category_from_query(query_lower)
+            logger.info("Keyword fallback: category=%s", category)
             level_filter = _extract_level_from_query(query_lower)
             ai_keywords = []
 

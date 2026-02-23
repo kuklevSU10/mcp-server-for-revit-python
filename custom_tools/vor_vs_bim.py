@@ -164,6 +164,87 @@ def _semantic_match_vor_to_bim(vor_name: str, bim_categories: list) -> str:
     return result
 
 
+# Cache for AI (gpt-4o-mini) matching results: vor_name -> matched_category
+_AI_MATCH_CACHE = {}
+
+
+def _ai_match_vor_to_bim(vor_name: str, bim_categories: list) -> str:
+    """Find closest BIM category for a VOR position name using gpt-4o-mini.
+
+    Uses OpenAI gpt-4o-mini for natural language semantic matching.
+    Falls back to keyword overlap if OpenAI is unavailable.
+    Caches results in _AI_MATCH_CACHE.
+
+    Args:
+        vor_name: VOR position name, e.g. "Кирпичная кладка стен из КСМ 190мм"
+        bim_categories: list of BIM label strings to pick from
+
+    Returns:
+        Best matching label from bim_categories, or "NO_MATCH"
+    """
+    if not bim_categories:
+        return "NO_MATCH"
+
+    cache_key = (vor_name, tuple(sorted(bim_categories)))
+    if cache_key in _AI_MATCH_CACHE:
+        return _AI_MATCH_CACHE[cache_key]
+
+    result = "NO_MATCH"
+
+    try:
+        import openai
+        client = openai.OpenAI()
+
+        cats_numbered = "\n".join(
+            "{}.  {}".format(i + 1, cat) for i, cat in enumerate(bim_categories)
+        )
+        prompt = (
+            "You are a construction BIM expert. "
+            "Given a VOR (Bill of Quantities) position name, pick the BEST matching BIM category "
+            "from the numbered list below. "
+            "Reply ONLY with the exact category name as it appears in the list, nothing else. "
+            "If none match, reply exactly: NO_MATCH\n\n"
+            "VOR position: {vor}\n\n"
+            "BIM categories:\n{cats}"
+        ).format(vor=vor_name, cats=cats_numbered)
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=100,
+            temperature=0.0,
+        )
+        answer = response.choices[0].message.content.strip()
+
+        # Validate answer is one of the categories or NO_MATCH
+        if answer in bim_categories:
+            result = answer
+        elif answer != "NO_MATCH":
+            # Try fuzzy: strip number prefix if model echoed it
+            answer_clean = answer.lstrip("0123456789. ").strip()
+            if answer_clean in bim_categories:
+                result = answer_clean
+            else:
+                result = "NO_MATCH"
+
+    except Exception:
+        # Fallback: simple keyword overlap with BIM category names
+        vor_lower = vor_name.lower()
+        best_cat = None
+        best_score = 0
+        for cat in bim_categories:
+            words = [w for w in cat.lower().replace("_", " ").split() if len(w) > 3]
+            score = sum(1 for w in words if w in vor_lower)
+            if score > best_score:
+                best_score = score
+                best_cat = cat
+        if best_score > 0:
+            result = best_cat
+
+    _AI_MATCH_CACHE[cache_key] = result
+    return result
+
+
 async def _fetch_bim_summary(revit_post, ctx):
     """Fetch bim_summary data (all semantic groups) from Revit model."""
     from ._constants import ALL_CATEGORIES, CAT_BATCHES
@@ -426,7 +507,14 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
             pattern_id = _match_vor_name_to_pattern(name_lower, patterns_sorted)
             match_method = "keyword" if pattern_id else "none"
 
-            # Step 2: semantic fallback when keyword matching fails
+            # Step 2: AI (gpt-4o-mini) fallback when keyword matching fails
+            if pattern_id is None and bim_label_list:
+                ai_label = _ai_match_vor_to_bim(name, bim_label_list)
+                if ai_label and ai_label != "NO_MATCH" and ai_label in labels_to_pid:
+                    pattern_id = labels_to_pid[ai_label]
+                    match_method = "ai"
+
+            # Step 3: embedding semantic fallback when both keyword and AI fail
             if pattern_id is None and bim_label_list:
                 best_label = _semantic_match_vor_to_bim(name, bim_label_list)
                 if best_label and best_label in labels_to_pid:
@@ -504,6 +592,7 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
                 "no_match":       len([m for m in matches if m.get("status") == "no_bim_match"]),
                 "missing":        len(missing_in_vor),
                 "tolerance_pct":  tolerance_pct,
+                "tolerance_used": tolerance_pct,
                 "patterns_loaded": len(patterns),
                 "source":         "excel:" + vor_file if vor_file else "json",
             },
