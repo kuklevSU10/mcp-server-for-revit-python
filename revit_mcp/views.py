@@ -37,6 +37,12 @@ def register_views_routes(api):
                     data={"error": "No active Revit document"}, status=503
                 )
 
+            # URL-decode view name (bottle may not decode path vars in older versions)
+            try:
+                from urllib import unquote as _unquote  # IronPython 2
+            except ImportError:
+                from urllib.parse import unquote as _unquote  # Python 3
+            view_name = _unquote(view_name)
             # Normalize the view name
             view_name = normalize_string(view_name)
             logger.info("Exporting view: {}".format(view_name))

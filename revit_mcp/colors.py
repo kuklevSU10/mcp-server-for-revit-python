@@ -619,6 +619,15 @@ def color_elements_by_parameter(
                 target_category = cat
                 break
 
+        # Fallback: English name -> BuiltInCategory (for non-English Revit locales)
+        if not target_category:
+            try:
+                bic = getattr(DB.BuiltInCategory, "OST_" + category_name, None)
+                if bic is not None:
+                    target_category = categories.get_Item(bic)
+            except Exception:
+                pass
+
         if not target_category:
             return {
                 "status": "error",
@@ -910,6 +919,15 @@ def clear_element_colors(doc, category_name):
                 target_category = cat
                 break
 
+        # Fallback: English name -> BuiltInCategory (for non-English Revit locales)
+        if not target_category:
+            try:
+                bic = getattr(DB.BuiltInCategory, "OST_" + category_name, None)
+                if bic is not None:
+                    target_category = categories.get_Item(bic)
+            except Exception:
+                pass
+
         if not target_category:
             return {
                 "status": "error",
@@ -1011,6 +1029,15 @@ def list_category_parameters(doc, category_name):
             if cat.Name == category_name:
                 target_category = cat
                 break
+
+        # Fallback: English name -> BuiltInCategory (for non-English Revit locales)
+        if not target_category:
+            try:
+                bic = getattr(DB.BuiltInCategory, "OST_" + category_name, None)
+                if bic is not None:
+                    target_category = categories.get_Item(bic)
+            except Exception:
+                pass
 
         if not target_category:
             return {
