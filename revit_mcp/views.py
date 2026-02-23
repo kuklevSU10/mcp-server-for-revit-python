@@ -214,6 +214,96 @@ def register_views_routes(api):
                 data={"error": "Failed to export view: {}".format(str(e))}, status=500
             )
 
+    @api.route("/get_view_post/", methods=["POST"])
+    def get_view_post(doc, request):
+        """Export a view by name passed in JSON body — avoids URL encoding issues."""
+        try:
+            if not doc:
+                return routes.make_response(
+                    data={"error": "No active Revit document"}, status=503
+                )
+            data = request.data or {}
+            view_name_raw = data.get("view_name", "") if isinstance(data, dict) else ""
+            view_name = normalize_string(view_name_raw)
+            if not view_name or view_name == u"Unnamed":
+                return routes.make_response(
+                    data={"error": "view_name is required in request body"}, status=400
+                )
+            logger.info("get_view_post: view={}".format(view_name))
+
+            output_folder = os.path.join(tempfile.gettempdir(), "RevitMCPExports")
+            if not os.path.exists(output_folder):
+                os.makedirs(output_folder)
+            file_path_prefix = os.path.join(output_folder, "export")
+
+            target_view = None
+            all_views = DB.FilteredElementCollector(doc).OfClass(DB.View).ToElements()
+            for view in all_views:
+                try:
+                    cur_name = normalize_string(get_element_name(view))
+                    if cur_name == view_name:
+                        target_view = view
+                        break
+                except Exception:
+                    continue
+
+            if not target_view:
+                avail = []
+                for view in all_views:
+                    try:
+                        n = normalize_string(get_element_name(view))
+                        if hasattr(view, "IsTemplate") and not view.IsTemplate:
+                            avail.append(n)
+                    except Exception:
+                        continue
+                return routes.make_response(
+                    data={"error": "View '{}' not found".format(view_name),
+                          "available_views": avail[:20]}, status=404)
+
+            try:
+                if hasattr(target_view, "IsTemplate") and target_view.IsTemplate:
+                    return routes.make_response(
+                        data={"error": "Cannot export view templates"}, status=400)
+            except Exception:
+                pass
+
+            ieo = DB.ImageExportOptions()
+            ieo.ExportRange = DB.ExportRange.SetOfViews
+            viewIds = List[DB.ElementId]()
+            viewIds.Add(target_view.Id)
+            ieo.SetViewsAndSheets(viewIds)
+            ieo.FilePath = file_path_prefix
+            ieo.HLRandWFViewsFileType = DB.ImageFileType.PNG
+            ieo.ShadowViewsFileType = DB.ImageFileType.PNG
+            ieo.ImageResolution = DB.ImageResolution.DPI_150
+            ieo.ZoomType = DB.ZoomFitType.FitToPage
+            ieo.PixelSize = 1024
+            doc.ExportImage(ieo)
+
+            matching_files = sorted(
+                [os.path.join(output_folder, f)
+                 for f in os.listdir(output_folder) if f.endswith(".png")],
+                key=lambda x: os.path.getctime(x), reverse=True)
+            if not matching_files:
+                return routes.make_response(
+                    data={"error": "Export failed - no image file created"}, status=500)
+
+            exported_file = matching_files[0]
+            with open(exported_file, "rb") as img_file:
+                img_data = img_file.read()
+            encoded_data = base64.b64encode(img_data).decode("utf-8")
+            try:
+                os.remove(exported_file)
+            except Exception:
+                pass
+            return routes.make_response(
+                data={"image_data": encoded_data, "content_type": "image/png",
+                      "view_name": view_name, "file_size_bytes": len(img_data),
+                      "export_success": True})
+        except Exception as e:
+            return routes.make_response(
+                data={"error": "Failed: {}".format(str(e))}, status=500)
+
     @api.route("/list_views/", methods=["GET"])
     def list_views(doc):
         """

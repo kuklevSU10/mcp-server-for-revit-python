@@ -50,6 +50,23 @@ async def revit_image(endpoint: str, ctx: Context = None) -> Union[Image, str]:
         return f"Error: {e}"
 
 
+async def revit_image_post(endpoint: str, data: Dict, ctx: Context = None) -> Union[Image, str]:
+    """POST request that returns an Image object (avoids URL-encoding issues)."""
+    def _do():
+        response = _requests.post(f"{BASE_URL}{endpoint}", json=data, timeout=120.0)
+        if response.status_code == 200:
+            img_data = base64.b64decode(response.json()["image_data"])
+            return ("image", img_data)
+        return ("error", f"Error: {response.status_code} - {response.text}")
+    try:
+        kind, payload = await asyncio.to_thread(_do)
+        if kind == "image":
+            return Image(data=payload, format="png")
+        return payload
+    except Exception as e:
+        return f"Error: {e}"
+
+
 async def _revit_call(method: str, endpoint: str, data: Dict = None, ctx: Context = None,
                       timeout: float = 600.0, params: Dict = None) -> Union[Dict, str]:
     """Internal function — uses requests via thread to avoid httpx/pyRevit incompatibility."""
@@ -71,7 +88,7 @@ async def _revit_call(method: str, endpoint: str, data: Dict = None, ctx: Contex
 
 # Register all tools BEFORE the main block
 from tools import register_tools
-register_tools(mcp, revit_get, revit_post, revit_image)
+register_tools(mcp, revit_get, revit_post, revit_image, revit_image_post)
 
 # Register custom tender tools (SU-10 Analytics)
 from custom_tools import register_custom_tools
