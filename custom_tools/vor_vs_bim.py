@@ -145,33 +145,159 @@ def _extract_bim_vol_for_unit(bim_entry, vor_unit):
     return float(bim_entry.get('count', 0))
 
 
+def _parse_vor_excel(file_path):
+    """Parse VOR Excel file into list of dicts.
+
+    Returns list of {"name": str, "unit": str, "volume": float}
+    or dict with "error" key on failure.
+    """
+    try:
+        import openpyxl
+    except ImportError:
+        return {"error": "openpyxl required: pip install openpyxl"}
+
+    if not os.path.exists(file_path):
+        return {"error": "File not found: " + file_path}
+
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+    except Exception as e:
+        return {"error": "Cannot open Excel file: " + str(e)}
+
+    # Pick sheet: prefer named sheets over first sheet
+    ws = None
+    for name in ("ВОР", "BIM", "Объёмы", "Объемы", "Volumes"):
+        if name in wb.sheetnames:
+            ws = wb[name]
+            break
+    if ws is None:
+        ws = wb.active
+
+    # Keyword sets (lowercase)
+    NAME_KW  = {"наименование", "название", "описание", "name", "работ", "позиция"}
+    UNIT_KW  = {"ед", "единица", "unit", "ед.изм", "ед. изм", "ед.изм.", "изм"}
+    VOL_KW   = {"объём", "объем", "количество", "кол-во", "volume", "qty", "кол.", "кол"}
+
+    # Find header row (scan first 10 rows)
+    header_row_idx = None
+    col_name = col_unit = col_vol = None
+
+    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10, values_only=True), start=1):
+        # Check if any cell matches a name keyword
+        row_strs = [(i, str(c).lower().strip() if c is not None else "") for i, c in enumerate(row)]
+        has_name_kw = any(any(kw in cell_s for kw in NAME_KW) for _, cell_s in row_strs if cell_s)
+        if not has_name_kw:
+            continue
+
+        # Found candidate header row — identify columns
+        for col_idx, cell_s in row_strs:
+            if cell_s == "":
+                continue
+            if any(kw in cell_s for kw in NAME_KW) and col_name is None:
+                col_name = col_idx
+            elif any(kw in cell_s for kw in UNIT_KW) and col_unit is None:
+                col_unit = col_idx
+            elif any(kw in cell_s for kw in VOL_KW) and col_vol is None:
+                col_vol = col_idx
+
+        if col_name is not None:
+            header_row_idx = row_idx
+            break
+
+    if header_row_idx is None or col_name is None:
+        return {"error": "Could not find header row in Excel file"}
+
+    # Iterate data rows after header
+    results = []
+    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
+        # Extract name cell
+        name_val = row[col_name] if col_name < len(row) else None
+        if name_val is None or str(name_val).strip() == "":
+            continue
+
+        name_str = str(name_val).strip()
+
+        # Skip separator/total rows
+        name_lower = name_str.lower()
+        if any(skip in name_lower for skip in ("итого", "итог", "total", "всего", "subtotal")):
+            continue
+        # Skip rows that are purely numeric
+        try:
+            float(name_str.replace(",", ".").replace(" ", ""))
+            continue  # it's a number, skip
+        except (ValueError, AttributeError):
+            pass
+
+        # Extract unit
+        unit_str = ""
+        if col_unit is not None and col_unit < len(row):
+            uv = row[col_unit]
+            unit_str = str(uv).strip() if uv is not None else ""
+
+        # Extract volume
+        vol_val = 0.0
+        if col_vol is not None and col_vol < len(row):
+            vv = row[col_vol]
+            if vv is not None:
+                try:
+                    vol_val = float(str(vv).replace(",", ".").replace(" ", ""))
+                except (ValueError, TypeError):
+                    vol_val = 0.0
+
+        results.append({"name": name_str, "unit": unit_str, "volume": vol_val})
+
+    if not results:
+        return {"error": "Excel file has no data rows"}
+
+    return results
+
+
 def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
     """Register VOR vs BIM comparison tools with semantic matching."""
 
     @mcp_server.tool()
     async def vor_vs_bim(
         vor_data: str = "[]",
+        vor_file: str = "",
         tolerance: float = 3.0,
         ctx: Context = None,
     ) -> dict:
         """Compare client VOR volumes with BIM model using semantic matching.
 
         vor_data: JSON string: [{"name": "Кирпичная кладка", "unit": "м3", "volume": 456.7}, ...]
+        vor_file: path to .xlsx/.xls file with VOR table (takes priority over vor_data)
         tolerance: percentage threshold for red flags (default 3.0%)
         Returns: {matches, red_flags, missing_in_vor, summary}
         """
-        # Validate before parsing
-        err = validate_vor_data(vor_data)
-        if err:
-            return {"error": "Validation error: " + err}
+        # --- Resolve VOR items source ---
+        vor_items = None
 
-        try:
-            vor_items = json.loads(vor_data)
-        except Exception as e:
-            return {"error": "Invalid vor_data JSON: " + str(e)}
+        # vor_file takes priority
+        if vor_file and vor_file.strip():
+            parsed = _parse_vor_excel(vor_file.strip())
+            if isinstance(parsed, dict) and "error" in parsed:
+                return parsed  # propagate parse error
+            vor_items = parsed
 
-        if not isinstance(vor_items, list):
-            return {"error": "vor_data must be a JSON array"}
+        # Fall back to vor_data JSON
+        if vor_items is None:
+            raw_data = vor_data.strip() if vor_data else ""
+            if not raw_data or raw_data == "[]":
+                return {
+                    "error": (
+                        "No VOR data provided. "
+                        "Pass vor_file='path/to/file.xlsx' or vor_data='[{...}]'"
+                    )
+                }
+            err = validate_vor_data(raw_data)
+            if err:
+                return {"error": "Validation error: " + err}
+            try:
+                vor_items = json.loads(raw_data)
+            except Exception as e:
+                return {"error": "Invalid vor_data JSON: " + str(e)}
+            if not isinstance(vor_items, list):
+                return {"error": "vor_data must be a JSON array"}
 
         # Load semantic patterns
         patterns = _load_patterns()
@@ -290,5 +416,63 @@ def register_vor_vs_bim_tools(mcp_server, revit_get, revit_post, revit_image):
                 "missing":        len(missing_in_vor),
                 "tolerance_pct":  tolerance,
                 "patterns_loaded": len(patterns),
+                "source":         "excel:" + vor_file if vor_file else "json",
             },
+        }
+
+    @mcp_server.tool()
+    async def vor_vs_bim_file(
+        vor_file: str,
+        tolerance: float = 3.0,
+        ctx: Context = None,
+    ) -> dict:
+        """Load VOR from Excel file and compare with BIM model.
+
+        Convenience wrapper around vor_vs_bim — just pass the path to the .xlsx file.
+        vor_file: absolute or relative path to Excel file with VOR table
+        tolerance: percentage threshold for red flags (default 3.0%)
+        Returns: {matches, red_flags, missing_in_vor, summary}
+
+        Excel format: the tool auto-detects columns for name/unit/volume.
+        Supported sheet names: ВОР, BIM, Объёмы (or first sheet).
+        """
+        if not vor_file or not vor_file.strip():
+            return {"error": "vor_file path is required"}
+
+        # Delegate to vor_vs_bim with vor_file set
+        return await vor_vs_bim(
+            vor_data="[]",
+            vor_file=vor_file,
+            tolerance=tolerance,
+            ctx=ctx,
+        )
+
+    @mcp_server.tool()
+    async def vor_excel_preview(vor_file: str) -> dict:
+        """Preview Excel VOR file parsing — shows detected columns and first 10 rows.
+
+        Useful to verify auto-detection before running full vor_vs_bim comparison.
+        vor_file: path to .xlsx file
+        Returns: {columns_detected, rows_preview, total_rows}
+        """
+        if not vor_file or not vor_file.strip():
+            return {"error": "vor_file path is required"}
+
+        result = _parse_vor_excel(vor_file.strip())
+        if isinstance(result, dict) and "error" in result:
+            return result
+
+        return {
+            "total_rows": len(result),
+            "rows_preview": result[:10],
+            "columns_detected": {
+                "name": "auto",
+                "unit": "auto",
+                "volume": "auto",
+            },
+            "message": (
+                "Detected {} positions. Use vor_vs_bim_file to run full comparison.".format(
+                    len(result)
+                )
+            ),
         }

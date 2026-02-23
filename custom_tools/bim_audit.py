@@ -82,6 +82,70 @@ _DUPLICATE_CODE = (
 )
 
 
+_MISSING_PARAMS_CODE = (
+    "import json\n"
+    "AUDIT_CATS = [\n"
+    "    DB.BuiltInCategory.OST_Walls,\n"
+    "    DB.BuiltInCategory.OST_Doors,\n"
+    "    DB.BuiltInCategory.OST_Windows,\n"
+    "    DB.BuiltInCategory.OST_StructuralColumns,\n"
+    "    DB.BuiltInCategory.OST_StructuralFraming,\n"
+    "]\n"
+    "issues = []\n"
+    "CHECKED_PARAMS = [\n"
+    "    DB.BuiltInParameter.ALL_MODEL_MARK,\n"
+    "]\n"
+    "for bic in AUDIT_CATS:\n"
+    "    elems = DB.FilteredElementCollector(doc).OfCategory(bic)"
+    ".WhereElementIsNotElementType().ToElements()\n"
+    "    cat_name = ''\n"
+    "    for elem in elems:\n"
+    "        if not cat_name and elem.Category:\n"
+    "            cat_name = elem.Category.Name\n"
+    "        empty_params = []\n"
+    "        for bip in CHECKED_PARAMS:\n"
+    "            try:\n"
+    "                p = elem.get_Parameter(bip)\n"
+    "                if p and not p.AsString():\n"
+    "                    empty_params.append(str(bip).split('.')[-1])\n"
+    "            except:\n"
+    "                pass\n"
+    "        if empty_params:\n"
+    "            issues.append({'type': 'missing_params', 'category': cat_name,"
+    " 'element_id': elem.Id.IntegerValue,"
+    " 'missing': empty_params,"
+    " 'description': 'Element missing required parameter values: ' + ', '.join(empty_params)})\n"
+    "        if len(issues) >= 500:\n"
+    "            break\n"
+    "print(json.dumps(issues[:500]))\n"
+)
+
+_UNUSED_FAMILIES_CODE = (
+    "import json\n"
+    "# Get all placed family instances\n"
+    "placed_symbols = set()\n"
+    "all_instances = DB.FilteredElementCollector(doc)"
+    ".OfClass(DB.FamilyInstance).ToElements()\n"
+    "for inst in all_instances:\n"
+    "    placed_symbols.add(inst.GetTypeId().IntegerValue)\n"
+    "# Get all loaded family symbols\n"
+    "issues = []\n"
+    "all_families = DB.FilteredElementCollector(doc)"
+    ".OfClass(DB.Family).ToElements()\n"
+    "for fam in all_families:\n"
+    "    if fam.IsEditable:\n"
+    "        sym_ids = list(fam.GetFamilySymbolIds())\n"
+    "        any_placed = any(sid.IntegerValue in placed_symbols for sid in sym_ids)\n"
+    "        if not any_placed and sym_ids:\n"
+    "            issues.append({'type': 'unused_family',"
+    " 'element_id': fam.Id.IntegerValue,"
+    " 'family_name': fam.Name,"
+    " 'symbol_count': len(sym_ids),"
+    " 'description': 'Family loaded but has no placed instances: ' + fam.Name})\n"
+    "print(json.dumps(issues[:200]))\n"
+)
+
+
 def register_bim_audit_tools(mcp_server, revit_get, revit_post, revit_image):
     """Register BIM audit tools."""
 
@@ -92,7 +156,7 @@ def register_bim_audit_tools(mcp_server, revit_get, revit_post, revit_image):
     ) -> dict:
         """Audit BIM model for common issues.
 
-        checks: zero_volume, missing_level, duplicate_elements, all
+        checks: zero_volume, missing_level, duplicate_elements, missing_params, unused_families, all
         Returns: {issues: [{type, description, element_id, severity}], summary}
         """
         if checks is None:
@@ -124,6 +188,14 @@ def register_bim_audit_tools(mcp_server, revit_get, revit_post, revit_image):
 
         if run_all or "duplicate_elements" in checks:
             found = await run_check(_DUPLICATE_CODE, "duplicate_elements")
+            all_issues.extend(found)
+
+        if run_all or "missing_params" in checks:
+            found = await run_check(_MISSING_PARAMS_CODE, "missing_params")
+            all_issues.extend(found)
+
+        if run_all or "unused_families" in checks:
+            found = await run_check(_UNUSED_FAMILIES_CODE, "unused_families")
             all_issues.extend(found)
 
         by_type: dict[str, int] = {}

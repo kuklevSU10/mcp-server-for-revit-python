@@ -16,6 +16,7 @@ from .bim_export import register_bim_export_tools
 from .vor_vs_bim import register_vor_vs_bim_tools
 from .bim_vor_generate import register_bim_vor_generate_tools
 from .bim_query import register_bim_query_tools
+from .bim_vor_to_sheets import register_bim_vor_to_sheets_tools
 
 
 def register_custom_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func):
@@ -36,3 +37,4 @@ def register_custom_tools(mcp_server, revit_get_func, revit_post_func, revit_ima
     register_vor_vs_bim_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)
     register_bim_vor_generate_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)
     register_bim_query_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)
+    register_bim_vor_to_sheets_tools(mcp_server, revit_get_func, revit_post_func, revit_image_func)
