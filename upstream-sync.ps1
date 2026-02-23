@@ -1,52 +1,47 @@
-# upstream-sync.ps1 — Sync fork with upstream (mcp-servers-for-revit)
-# Our custom code lives in custom_tools/ and custom_routes/ — no conflicts expected
-# Only main.py has our 3 added lines (easy manual merge if needed)
-
-param(
-    [switch]$DryRun,
-    [switch]$Force
-)
+# upstream-sync.ps1
+# Sync our fork with upstream without overwriting custom_tools/ and bim-semantic-layer/
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "[SYNC] Fetching upstream..." -ForegroundColor Cyan
+$UPSTREAM = "https://github.com/mcp-servers-for-revit/mcp-server-for-revit-python.git"
+
+Write-Host "[1] Fetch upstream..."
+git remote add upstream $UPSTREAM 2>$null
 git fetch upstream
 
-$behind = git rev-list --count "HEAD..upstream/master"
-$ahead = git rev-list --count "upstream/master..HEAD"
+Write-Host "`n[2] Upstream commits not in our master:"
+git log HEAD..upstream/master --oneline | Select-Object -First 20
 
-Write-Host "[SYNC] Status: $behind commits behind, $ahead commits ahead of upstream" -ForegroundColor Yellow
-
-if ($behind -eq 0) {
-    Write-Host "[SYNC] Already up to date!" -ForegroundColor Green
+$delta = (git log HEAD..upstream/master --oneline 2>$null).Count
+if ($delta -eq 0) {
+    Write-Host "`n[OK] We are up to date with upstream."
     exit 0
 }
 
-if ($DryRun) {
-    Write-Host "[SYNC] Dry run — would merge $behind commits from upstream/master" -ForegroundColor Yellow
-    git log --oneline "HEAD..upstream/master"
-    exit 0
+Write-Host "`n[3] Merging upstream/master with our changes..."
+Write-Host "    (custom_tools/ and bim-semantic-layer/ will NOT be overwritten)"
+
+# Strategy: merge with ours for our protected directories
+git merge upstream/master --no-edit -X ours --no-ff 2>&1
+
+Write-Host "`n[4] Checking protected files survived..."
+$protected = @(
+    "custom_tools/__init__.py",
+    "custom_tools/bim_catalog.py",
+    "custom_tools/bim_summary.py",
+    "custom_tools/vor_vs_bim.py",
+    "custom_tools/bim_vor_to_sheets.py",
+    "bim-semantic-layer/global_patterns.json"
+)
+foreach ($f in $protected) {
+    if (Test-Path $f) {
+        Write-Host "  [OK] $f exists"
+    } else {
+        Write-Host "  [WARN] $f MISSING after merge!"
+    }
 }
 
-Write-Host "[SYNC] Merging upstream/master..." -ForegroundColor Cyan
-$mergeResult = git merge upstream/master --no-edit 2>&1
+Write-Host "`n[5] Push to our fork..."
+git push
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "[SYNC] MERGE CONFLICT detected!" -ForegroundColor Red
-    Write-Host "[SYNC] Resolving: keeping our custom_tools/ and custom_routes/" -ForegroundColor Yellow
-    
-    # Our folders — always keep ours
-    if (Test-Path "custom_tools") { git checkout --ours custom_tools/ 2>$null }
-    if (Test-Path "custom_routes") { git checkout --ours custom_routes/ 2>$null }
-    
-    # Check if main.py has conflict (our 3 lines)
-    $conflicts = git diff --name-only --diff-filter=U
-    Write-Host "[SYNC] Remaining conflicts: $conflicts" -ForegroundColor Red
-    Write-Host "[SYNC] Please resolve manually, then: git add . && git commit" -ForegroundColor Yellow
-    exit 1
-}
-
-Write-Host "[SYNC] Merge successful! Pushing to origin..." -ForegroundColor Green
-git push origin master
-
-Write-Host "[SYNC] Done! $behind commits merged from upstream." -ForegroundColor Green
+Write-Host "`n[DONE] Sync complete. Our custom tools preserved."
