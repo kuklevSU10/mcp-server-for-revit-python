@@ -1,8 +1,11 @@
+# DEPRECATED: используй bim_export вместо этого инструмента.
+# Этот файл оставлен для обратной совместимости.
+# CAT_MAP здесь содержал только 6 категорий из 32 — неполный результат.
 # -*- coding: utf-8 -*-
 """BIM volumes extraction tool for tender analysis."""
 import json
 from mcp.server.fastmcp import Context
-from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M, ironpython_cat_map
 
 
 def register_bim_volumes_tools(mcp_server, revit_get, revit_post, revit_image):
@@ -28,14 +31,7 @@ def register_bim_volumes_tools(mcp_server, revit_get, revit_post, revit_image):
 
         code = (
             "import json\n"
-            "CAT_MAP = {\n"
-            "    'Walls': DB.BuiltInCategory.OST_Walls,\n"
-            "    'Floors': DB.BuiltInCategory.OST_Floors,\n"
-            "    'Roofs': DB.BuiltInCategory.OST_Roofs,\n"
-            "    'Columns': DB.BuiltInCategory.OST_StructuralColumns,\n"
-            "    'Doors': DB.BuiltInCategory.OST_Doors,\n"
-            "    'Windows': DB.BuiltInCategory.OST_Windows,\n"
-            "}\n"
+            + ironpython_cat_map(categories) + "\n"
             "categories = " + cats_repr + "\n"
             "group_by = " + group_repr + "\n"
             "FT3_TO_M3 = 0.028316846592\n"

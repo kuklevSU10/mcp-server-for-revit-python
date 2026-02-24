@@ -19,7 +19,7 @@ DEFAULT_SEARCH_LIMIT  = 500
 DEFAULT_MAX_PARAMS    = 200
 
 # Audit duplicate checks
-AUDIT_DUPLICATE_CATEGORIES = ['Walls', 'Floors', 'Columns', 'Beams', 'Foundations']
+AUDIT_DUPLICATE_CATEGORIES = ['Walls', 'Floors', 'Columns', 'StructuralFraming', 'StructuralFoundation']
 AUDIT_MAX_DUPLICATES       = 200
 
 # ============================================================
@@ -58,13 +58,13 @@ CATEGORY_REGISTRY = {
         'has_area': False,
         'has_length': False,
     },
-    'Beams': {
+    'StructuralFraming': {
         'ost': 'OST_StructuralFraming',
         'has_volume': True,
         'has_area': False,
         'has_length': True,
     },
-    'Foundations': {
+    'StructuralFoundation': {
         'ost': 'OST_StructuralFoundation',
         'has_volume': True,
         'has_area': True,
@@ -82,7 +82,7 @@ CATEGORY_REGISTRY = {
         'has_area': False,
         'has_length': False,
     },
-    'Railings': {
+    'StairsRailing': {
         'ost': 'OST_StairsRailing',
         'has_volume': False,
         'has_area': False,
@@ -217,48 +217,66 @@ CATEGORY_REGISTRY = {
         'has_area': False,
         'has_length': False,
     },
+    'FlexDucts': {
+        'ost': 'OST_FlexDuctCurves',
+        'has_volume': False,
+        'has_area': False,
+        'has_length': True,
+    },
+    'FlexPipes': {
+        'ost': 'OST_FlexPipeCurves',
+        'has_volume': False,
+        'has_area': False,
+        'has_length': True,
+    },
+    'DuctAccessory': {
+        'ost': 'OST_DuctAccessory',
+        'has_volume': False,
+        'has_area': False,
+        'has_length': False,
+    },
+    'PipeAccessory': {
+        'ost': 'OST_PipeAccessory',
+        'has_volume': False,
+        'has_area': False,
+        'has_length': False,
+    },
 }
 
 # ---------------------------------------------------------------------------
-# Category map: name -> (OST_Name, has_volume, has_area, has_length)
-# Used by bim_catalog, bim_summary, vor_vs_bim, bim_query
+# ALL_CATEGORIES — auto-generated from CATEGORY_REGISTRY
+# Format: name -> (OST_Name, has_volume, has_area, has_length)
+# Used by bim_catalog, bim_summary, vor_vs_bim, bim_query, _scan_engine
 # ---------------------------------------------------------------------------
 ALL_CATEGORIES = {
-    # Structural
-    "Walls":               ("OST_Walls",              True,  True,  False),
-    "Floors":              ("OST_Floors",             True,  True,  False),
-    "Roofs":               ("OST_Roofs",              True,  True,  False),
-    "Ceilings":            ("OST_Ceilings",           False, True,  False),
-    "Columns":             ("OST_StructuralColumns",  True,  False, False),
-    "StructuralFraming":   ("OST_StructuralFraming",  True,  False, True),
-    "StructuralFoundation":("OST_StructuralFoundation",True, True,  False),
-    "Ramps":               ("OST_Ramps",              False, True,  False),
-    "Stairs":              ("OST_Stairs",             False, False, False),
-    "StairsRailing":       ("OST_StairsRailing",      False, False, True),
-    # Architectural
-    "Doors":               ("OST_Doors",              False, False, False),
-    "Windows":             ("OST_Windows",            False, False, False),
-    "Furniture":           ("OST_Furniture",          False, False, False),
-    "FurnitureSystems":    ("OST_FurnitureSystems",   False, False, False),
-    "CurtainWallPanels":   ("OST_CurtainWallPanels",  False, True,  False),
-    "GenericModel":        ("OST_GenericModel",       False, False, False),
-    "Casework":            ("OST_Casework",           False, False, False),
-    # MEP
-    "Ducts":               ("OST_DuctCurves",         False, False, True),
-    "Pipes":               ("OST_PipeCurves",         False, False, True),
-    "MechanicalEquipment": ("OST_MechanicalEquipment",False, False, False),
-    "PlumbingFixtures":    ("OST_PlumbingFixtures",   False, False, False),
-    "FlexDucts":           ("OST_FlexDuctCurves",     False, False, True),
-    "FlexPipes":           ("OST_FlexPipeCurves",     False, False, True),
-    "DuctAccessory":       ("OST_DuctAccessory",      False, False, False),
-    "PipeAccessory":       ("OST_PipeAccessory",      False, False, False),
-    # Electrical
-    "ElectricalEquipment": ("OST_ElectricalEquipment",False, False, False),
-    "ElectricalFixtures":  ("OST_ElectricalFixtures", False, False, False),
-    "LightingFixtures":    ("OST_LightingFixtures",   False, False, False),
-    "CableTray":           ("OST_CableTray",          False, False, True),
-    "Conduit":             ("OST_Conduit",            False, False, True),
+    k: (v['ost'], v['has_volume'], v['has_area'], v['has_length'])
+    for k, v in CATEGORY_REGISTRY.items()
 }
+
+# Simple name -> OST map for tools that only need the OST string
+CAT_OST_MAP = {k: v['ost'] for k, v in CATEGORY_REGISTRY.items()}
+
+# ---------------------------------------------------------------------------
+# ironpython_cat_map — generate IronPython CAT_MAP snippet for code strings
+# Used by bim_report, bim_volumes, bim_to_vor, bim_vor_to_sheets, bim_audit
+# ---------------------------------------------------------------------------
+def ironpython_cat_map(categories):
+    """Generate IronPython code for a CAT_MAP = {name: DB.BuiltInCategory.OST_*} dict.
+
+    Args:
+        categories: list of category name strings (keys of CATEGORY_REGISTRY)
+
+    Returns:
+        str — multi-line IronPython code snippet ready for embedding.
+    """
+    lines = ["CAT_MAP = {"]
+    for name in categories:
+        info = CATEGORY_REGISTRY.get(name)
+        if info:
+            lines.append("    '{}': DB.BuiltInCategory.{},".format(name, info['ost']))
+    lines.append("}\n")
+    return "\n".join(lines)
+
 
 # Batch groups for scanning (5-6 categories per batch to avoid Revit timeout)
 CAT_BATCHES = [

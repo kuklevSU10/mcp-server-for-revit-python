@@ -2,27 +2,8 @@
 """BIM Inspect — full parameter dump for any element (like RevitLookup via MCP)."""
 import json
 from mcp.server.fastmcp import Context
-from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
+from ._constants import CAT_OST_MAP, FT3_TO_M3, FT2_TO_M2, FT_TO_M
 from ._validation import validate_element_id
-
-CAT_MAP_INSPECT = {
-    "Walls":                "OST_Walls",
-    "Floors":               "OST_Floors",
-    "Roofs":                "OST_Roofs",
-    "Columns":              "OST_StructuralColumns",
-    "StructuralFraming":    "OST_StructuralFraming",
-    "StructuralFoundation": "OST_StructuralFoundation",
-    "Doors":                "OST_Doors",
-    "Windows":              "OST_Windows",
-    "Furniture":            "OST_Furniture",
-    "GenericModel":         "OST_GenericModel",
-    "Ducts":                "OST_DuctCurves",
-    "Pipes":                "OST_PipeCurves",
-    "MechanicalEquipment":  "OST_MechanicalEquipment",
-    "ElectricalEquipment":  "OST_ElectricalEquipment",
-    "LightingFixtures":     "OST_LightingFixtures",
-    "CableTray":            "OST_CableTray",
-}
 
 
 def _build_inspect_by_id_code(element_id, max_params):
@@ -98,7 +79,7 @@ def _build_inspect_by_id_code(element_id, max_params):
 
 
 def _build_inspect_by_type_name_code(category, type_name_str, max_params):
-    ost = CAT_MAP_INSPECT.get(category, "OST_Walls")
+    ost = CAT_OST_MAP.get(category, "OST_Walls")
     mp = int(max_params)
     tn_repr = repr(type_name_str)
     code = (
@@ -183,8 +164,8 @@ def register_bim_inspect_tools(mcp_server, revit_get, revit_post, revit_image):
             code = _build_inspect_by_type_name_code(category, type_name, max_params)
         elif type_id is not None:
             # Inspect by type ID — find first instance
-            if category and category in CAT_MAP_INSPECT:
-                _cat_filter = ".OfCategory(DB.BuiltInCategory.{})".format(CAT_MAP_INSPECT[category])
+            if category and category in CAT_OST_MAP:
+                _cat_filter = ".OfCategory(DB.BuiltInCategory.{})".format(CAT_OST_MAP[category])
             else:
                 _cat_filter = ""
             code = (

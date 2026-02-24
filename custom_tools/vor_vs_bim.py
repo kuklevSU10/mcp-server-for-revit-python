@@ -5,24 +5,7 @@ import os
 from mcp.server.fastmcp import Context
 from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2
 from ._validation import validate_vor_data
-
-PATTERNS_PATH = os.path.join(
-    os.path.dirname(__file__),
-    '..', '..', 'bim-semantic-layer', 'global_patterns.json'
-)
-
-
-def _load_patterns():
-    """Load patterns list from global_patterns.json."""
-    try:
-        path = os.path.normpath(PATTERNS_PATH)
-        with open(path, encoding='utf-8') as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return data.get('patterns', [])
-        return data
-    except Exception:
-        return []
+from ._patterns import load_patterns as _load_patterns, PATTERNS_PATH
 
 
 def _build_reverse_index(patterns):

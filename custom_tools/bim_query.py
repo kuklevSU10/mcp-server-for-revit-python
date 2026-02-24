@@ -19,7 +19,7 @@ from .vor_vs_bim import (
     PATTERNS_PATH,
 )
 # Re-use search code builder from bim_search
-from .bim_search import _build_search_code, CAT_MAP_SEARCH
+from .bim_search import _build_search_code
 
 
 # ---------------------------------------------------------------------------
@@ -52,7 +52,7 @@ def _extract_category_from_query(query_lower):
         for kw in keywords:
             if kw in query_lower:
                 return category
-    return 'Walls'   # default fallback
+    return None   # no category recognized — caller must handle
 
 
 def _extract_level_from_query(query_lower):
@@ -223,6 +223,24 @@ def register_bim_query_tools(mcp_server, revit_get, revit_post, revit_image):
             logger.info("Keyword fallback: category=%s", category)
             level_filter = _extract_level_from_query(query_lower)
             ai_keywords = []
+
+        # If neither AI nor keyword parser recognized category, try pattern categories
+        if category is None:
+            # Attempt to infer from semantic pattern match
+            _tmp_pid = _match_vor_name_to_pattern(query_lower, patterns)
+            if _tmp_pid:
+                _tmp_pat = next((p for p in patterns if p.get('id') == _tmp_pid), None)
+                if _tmp_pat and _tmp_pat.get('categories'):
+                    category = _tmp_pat['categories'][0]
+                    logger.info("Category inferred from pattern: %s", category)
+            if category is None:
+                return {
+                    "error": "Could not determine BIM category from query. "
+                             "Try specifying: 'стены на 2 этаже', 'перекрытия', 'балки' etc.",
+                    "query": query,
+                    "hint": "Supported: стены, перекрытия, колонны, балки, двери, окна, "
+                            "трубы, воздуховоды, кабельные лотки, лестницы, мебель, оборудование",
+                }
 
         # --- Semantic pattern match (always run for extra keywords) ---
         pattern_id = _match_vor_name_to_pattern(query_lower, patterns)

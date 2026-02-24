@@ -1,9 +1,11 @@
+# DEPRECATED: используй bim_export вместо этого инструмента.
 # -*- coding: utf-8 -*-
 """BIM → VOR → Google Sheets export tool."""
 import json
 import os
 import datetime
 from mcp.server.fastmcp import Context
+from ._constants import ironpython_cat_map, CAT_OST_MAP
 
 _GWORKSPACE_DIR = r"C:\Users\kuklev.d.s\clawd\.gworkspace"
 _TOKEN_PATH = os.path.join(_GWORKSPACE_DIR, "token.json")
@@ -113,14 +115,7 @@ async def _get_bim_vor_data(mapping, revit_post, ctx):
         cats_repr = repr(needed_cats)
         code = (
             "import json\n"
-            "CAT_MAP = {\n"
-            "    'Walls': DB.BuiltInCategory.OST_Walls,\n"
-            "    'Floors': DB.BuiltInCategory.OST_Floors,\n"
-            "    'Roofs': DB.BuiltInCategory.OST_Roofs,\n"
-            "    'Columns': DB.BuiltInCategory.OST_StructuralColumns,\n"
-            "    'Doors': DB.BuiltInCategory.OST_Doors,\n"
-            "    'Windows': DB.BuiltInCategory.OST_Windows,\n"
-            "}\n"
+            + ironpython_cat_map(list(CAT_OST_MAP.keys())) + "\n"
             "FT3_TO_M3 = 0.028316846592\n"
             "FT2_TO_M2 = 0.09290304\n"
             "categories = " + cats_repr + "\n"

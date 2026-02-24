@@ -8,7 +8,7 @@ can import it without circular dependencies.
 from ._constants import FT3_TO_M3, FT2_TO_M2, FT_TO_M
 
 
-def _build_batch_code(batch_cats, cat_map, include_params):
+def _build_batch_code(batch_cats, cat_map, include_params, doc_expression="doc"):
     """Build IronPython code to scan a batch of categories.
 
     Args:
@@ -44,13 +44,13 @@ def _build_batch_code(batch_cats, cat_map, include_params):
     lines.append("for cat_name, (bic, has_vol, has_area, has_len) in CAT_MAP.items():")
     lines.append("    try:")
     lines.append(
-        "        elems = DB.FilteredElementCollector(doc)"
+        "        elems = DB.FilteredElementCollector(" + doc_expression + ")"
         ".OfCategory(bic).WhereElementIsNotElementType().ToElements()"
     )
     lines.append("        groups = {}")
     lines.append("        for elem in elems:")
     lines.append("            try:")
-    lines.append("                te = doc.GetElement(elem.GetTypeId())")
+    lines.append("                te = " + doc_expression + ".GetElement(elem.GetTypeId())")
     lines.append("                _p = te.get_Parameter(DB.BuiltInParameter.SYMBOL_NAME_PARAM) if te else None")
     lines.append("                key = _p.AsString() if (_p and _p.HasValue) else 'Unknown'")
     lines.append("                vp = elem.get_Parameter(DB.BuiltInParameter.HOST_VOLUME_COMPUTED)")

@@ -3,7 +3,7 @@
 import json
 from datetime import datetime
 from mcp.server.fastmcp import Context
-from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M, ironpython_cat_map
 
 _MODEL_INFO_CODE = (
     "import json\n"
@@ -17,16 +17,10 @@ _MODEL_INFO_CODE = (
     "print(json.dumps(info))\n"
 )
 
+_REPORT_CATS = ["Walls", "Floors", "Roofs", "Columns", "Doors", "Windows"]
 _VOLUMES_CODE = (
     "import json\n"
-    "CAT_MAP = {\n"
-    "    'Walls': DB.BuiltInCategory.OST_Walls,\n"
-    "    'Floors': DB.BuiltInCategory.OST_Floors,\n"
-    "    'Roofs': DB.BuiltInCategory.OST_Roofs,\n"
-    "    'Columns': DB.BuiltInCategory.OST_StructuralColumns,\n"
-    "    'Doors': DB.BuiltInCategory.OST_Doors,\n"
-    "    'Windows': DB.BuiltInCategory.OST_Windows,\n"
-    "}\n"
+    + ironpython_cat_map(_REPORT_CATS) + "\n"
     "FT3_TO_M3 = 0.028316846592\n"
     "FT2_TO_M2 = 0.09290304\n"
     "result = {}\n"

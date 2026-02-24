@@ -2,31 +2,8 @@
 """BIM Search — find elements by parameters with multiple operators."""
 import json
 from mcp.server.fastmcp import Context
-from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
+from ._constants import CAT_OST_MAP, FT3_TO_M3, FT2_TO_M2, FT_TO_M
 from ._validation import validate_filters
-
-CAT_MAP_SEARCH = {
-    "Walls":                "OST_Walls",
-    "Floors":               "OST_Floors",
-    "Roofs":                "OST_Roofs",
-    "Ceilings":             "OST_Ceilings",
-    "Columns":              "OST_StructuralColumns",
-    "StructuralFraming":    "OST_StructuralFraming",
-    "StructuralFoundation": "OST_StructuralFoundation",
-    "Doors":                "OST_Doors",
-    "Windows":              "OST_Windows",
-    "Furniture":            "OST_Furniture",
-    "GenericModel":         "OST_GenericModel",
-    "Ducts":                "OST_DuctCurves",
-    "Pipes":                "OST_PipeCurves",
-    "MechanicalEquipment":  "OST_MechanicalEquipment",
-    "ElectricalEquipment":  "OST_ElectricalEquipment",
-    "LightingFixtures":     "OST_LightingFixtures",
-    "CableTray":            "OST_CableTray",
-    "Conduit":              "OST_Conduit",
-    "Ramps":                "OST_Ramps",
-    "Stairs":               "OST_Stairs",
-}
 
 # Map op name → Python expression (v=value, pv=param_value string)
 OP_MAP = {
@@ -55,7 +32,7 @@ COLOR_MAP = {
 
 
 def _build_search_code(category, filters, return_params, limit):
-    ost = CAT_MAP_SEARCH.get(category, "OST_Walls")
+    ost = CAT_OST_MAP.get(category, "OST_Walls")
     filters_repr = repr(filters)
     rp_repr = repr(return_params)
     lim = int(limit)

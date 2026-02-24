@@ -2,16 +2,12 @@
 """BIM model audit tool — checks for common modeling issues."""
 import json
 from mcp.server.fastmcp import Context
-from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M, ironpython_cat_map
 
+_ZERO_VOL_CATS = ["Walls", "Floors", "Roofs", "Columns"]
 _ZERO_VOLUME_CODE = (
     "import json\n"
-    "CAT_MAP = {\n"
-    "    'Walls': DB.BuiltInCategory.OST_Walls,\n"
-    "    'Floors': DB.BuiltInCategory.OST_Floors,\n"
-    "    'Roofs': DB.BuiltInCategory.OST_Roofs,\n"
-    "    'Columns': DB.BuiltInCategory.OST_StructuralColumns,\n"
-    "}\n"
+    + ironpython_cat_map(_ZERO_VOL_CATS) + "\n"
     "issues = []\n"
     "for cat_name, bic in CAT_MAP.items():\n"
     "    elems = DB.FilteredElementCollector(doc).OfCategory(bic)"

@@ -4,25 +4,9 @@ import json
 import os
 import re
 from mcp.server.fastmcp import Context
-from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M, MAX_BATCH_SIZE
 from ._linked_files import build_linked_files_code, build_linked_batch_code
-from ._constants import MAX_BATCH_SIZE
-
-PATTERNS_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "..", "..", "bim-semantic-layer", "global_patterns.json"
-)
-
-
-def _load_patterns():
-    """Load global_patterns.json from bim-semantic-layer."""
-    try:
-        path = os.path.normpath(PATTERNS_PATH)
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return data.get("patterns", [])
-    except Exception as e:
-        return []
+from ._patterns import load_patterns as _load_patterns, PATTERNS_PATH
 
 
 def _match_type_to_pattern(type_name, category, patterns):

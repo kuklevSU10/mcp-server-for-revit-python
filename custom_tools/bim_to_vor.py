@@ -1,9 +1,10 @@
+# DEPRECATED: используй vor_vs_bim вместо этого инструмента.
 # -*- coding: utf-8 -*-
 """BIM to VOR (work breakdown) mapping tool."""
 import json
 import os
 from mcp.server.fastmcp import Context
-from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M
+from ._constants import CATEGORY_REGISTRY, FT3_TO_M3, FT2_TO_M2, FT_TO_M, ironpython_cat_map, CAT_OST_MAP
 
 _MAPPINGS_DIR = os.path.join(os.path.dirname(__file__), "mappings")
 
@@ -47,14 +48,7 @@ def register_bim_to_vor_tools(mcp_server, revit_get, revit_post, revit_image):
         cats_repr = repr(needed_cats)
         code = (
             "import json\n"
-            "CAT_MAP = {\n"
-            "    'Walls': DB.BuiltInCategory.OST_Walls,\n"
-            "    'Floors': DB.BuiltInCategory.OST_Floors,\n"
-            "    'Roofs': DB.BuiltInCategory.OST_Roofs,\n"
-            "    'Columns': DB.BuiltInCategory.OST_StructuralColumns,\n"
-            "    'Doors': DB.BuiltInCategory.OST_Doors,\n"
-            "    'Windows': DB.BuiltInCategory.OST_Windows,\n"
-            "}\n"
+            + ironpython_cat_map(list(CAT_OST_MAP.keys())) + "\n"
             "FT3_TO_M3 = 0.028316846592\n"
             "FT2_TO_M2 = 0.09290304\n"
             "categories = " + cats_repr + "\n"
