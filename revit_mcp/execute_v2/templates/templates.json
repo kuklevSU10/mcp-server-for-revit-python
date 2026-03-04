@@ -1,0 +1,184 @@
+[
+  {
+    "id": "rename_elements_by_category",
+    "name": "Переименовать элементы категории по шаблону",
+    "description": "Переименовать (задать Mark) всем элементам указанной категории на уровне по шаблону нумерации",
+    "category": "Общие",
+    "params": {
+      "category": "Doors",
+      "level": "Уровень 1",
+      "template": "Д-{n:03d}"
+    },
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_{category}).WhereElementIsNotElementType()\nelements = [e for e in collector if e.LookupParameter('Level') and e.LookupParameter('Level').AsValueString() == '{level}']\n\nwith Transaction(doc, 'Rename elements') as t:\n    t.Start()\n    for n, elem in enumerate(elements, 1):\n        mark = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n        if mark and not mark.IsReadOnly:\n            mark.Set('{template}'.format(n=n))\n    t.Commit()\n\n__result__ = len(elements)",
+    "tags": ["rename", "mark", "category", "level", "нумерация", "переименовать"]
+  },
+  {
+    "id": "set_parameter_on_level",
+    "name": "Установить параметр всем элементам на уровне",
+    "description": "Задать значение параметра всем элементам указанной категории на конкретном уровне",
+    "category": "Параметры",
+    "params": {
+      "category": "Walls",
+      "level": "Уровень 1",
+      "param_name": "Comments",
+      "param_value": "Проверено"
+    },
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_{category}).WhereElementIsNotElementType()\nelements = [e for e in collector if e.LookupParameter('Level') and e.LookupParameter('Level').AsValueString() == '{level}']\n\ncount = 0\nwith Transaction(doc, 'Set parameter') as t:\n    t.Start()\n    for elem in elements:\n        p = elem.LookupParameter('{param_name}')\n        if p and not p.IsReadOnly:\n            p.Set('{param_value}')\n            count += 1\n    t.Commit()\n\n__result__ = count",
+    "tags": ["parameter", "set", "level", "параметр", "установить", "задать"]
+  },
+  {
+    "id": "find_elements_without_parameter",
+    "name": "Найти элементы без параметра",
+    "description": "Найти все элементы категории у которых не заполнен указанный параметр",
+    "category": "Проверки",
+    "params": {
+      "category": "Rooms",
+      "param_name": "Number"
+    },
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_{category}).WhereElementIsNotElementType()\n\nmissing = []\nfor elem in collector:\n    p = elem.LookupParameter('{param_name}')\n    if p is None or (p.StorageType == StorageType.String and (p.AsString() is None or p.AsString().strip() == '')):\n        missing.append(elem.Id.IntegerValue)\n\n__result__ = missing",
+    "tags": ["find", "missing", "parameter", "check", "найти", "без параметра", "пустой"]
+  },
+  {
+    "id": "create_schedule_by_category",
+    "name": "Создать спецификацию по категории",
+    "description": "Создать табличную спецификацию (ViewSchedule) для указанной категории с базовыми полями",
+    "category": "Виды",
+    "params": {
+      "category": "Walls",
+      "schedule_name": "Ведомость стен"
+    },
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\nwith Transaction(doc, 'Create schedule') as t:\n    t.Start()\n    schedule = ViewSchedule.CreateSchedule(doc, ElementId(BuiltInCategory.OST_{category}))\n    schedule.Name = '{schedule_name}'\n    \n    # Add basic fields\n    fields = schedule.Definition\n    schedulable = fields.GetSchedulableFields()\n    added = 0\n    for sf in schedulable:\n        if added >= 5:\n            break\n        try:\n            fields.AddField(sf)\n            added += 1\n        except:\n            pass\n    \n    t.Commit()\n\n__result__ = schedule.Id.IntegerValue",
+    "tags": ["schedule", "create", "view", "спецификация", "создать", "ведомость"]
+  },
+  {
+    "id": "calculate_area_by_levels",
+    "name": "Подсчитать площадь элементов по уровням",
+    "description": "Посчитать суммарную площадь элементов категории на каждом уровне модели",
+    "category": "Аналитика",
+    "params": {
+      "category": "Floors"
+    },
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_{category}).WhereElementIsNotElementType()\n\narea_by_level = {}\nfor elem in collector:\n    level_param = elem.LookupParameter('Level')\n    level_name = level_param.AsValueString() if level_param else 'Без уровня'\n    area_param = elem.get_Parameter(BuiltInParameter.HOST_AREA_COMPUTED)\n    if area_param:\n        area_m2 = area_param.AsDouble() * 0.092903  # sq ft to sq m\n        area_by_level[level_name] = area_by_level.get(level_name, 0) + area_m2\n\n# Round values\nfor k in area_by_level:\n    area_by_level[k] = round(area_by_level[k], 2)\n\n__result__ = area_by_level",
+    "tags": ["area", "calculate", "level", "площадь", "подсчитать", "уровень", "аналитика"]
+  },
+  {
+    "id": "project_summary",
+    "name": "Сводка по проекту",
+    "description": "Собирает общую информацию по проекту: имя проекта, количество уровней, топ-5 категорий с количеством элементов",
+    "category": "READ",
+    "tags": ["summary", "project", "levels", "categories", "сводка", "проект", "аналитика"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\n# Имя проекта\ninfo = doc.ProjectInformation\nproject_name = getattr(info, 'Name', '') or ''\n\n# Уровни\nlevels = list(FilteredElementCollector(doc).OfClass(Level).ToElements())\nlevel_count = len(levels)\n\n# Все элементы по категориям\nall_elements = list(FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements())\ncategory_counts = {}\nfor elem in all_elements:\n    cat = elem.Category\n    if cat is None:\n        continue\n    cat_name = cat.Name\n    category_counts[cat_name] = category_counts.get(cat_name, 0) + 1\n\n# Топ-5 категорий\nsorted_cats = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)\ntop5 = [{'category': k, 'count': v} for k, v in sorted_cats[:5]]\n\n__result__ = {\n    'project_name': project_name,\n    'level_count': level_count,\n    'total_elements': len(all_elements),\n    'top_categories': top5\n}"
+  },
+  {
+    "id": "rooms_by_level",
+    "name": "Помещения по этажам с площадями",
+    "description": "Список помещений (Rooms), сгруппированных по уровню, с указанием площади в м²",
+    "category": "READ",
+    "tags": ["rooms", "level", "area", "помещения", "площадь", "этаж"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\nfrom Autodesk.Revit.DB.Architecture import Room\n\ncollector = list(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Rooms).WhereElementIsNotElementType().ToElements())\n\nresult = {}\nfor elem in collector:\n    level_param = elem.LookupParameter('Level')\n    level_name = level_param.AsValueString() if level_param else 'Без уровня'\n\n    name_param = elem.LookupParameter('Name')\n    room_name = name_param.AsString() if name_param else ''\n\n    num_param = elem.LookupParameter('Number')\n    room_num = num_param.AsString() if num_param else ''\n\n    area_param = elem.get_Parameter(BuiltInParameter.ROOM_AREA)\n    area_m2 = round(area_param.AsDouble() * 0.092903, 2) if area_param else 0.0\n\n    if level_name not in result:\n        result[level_name] = []\n    result[level_name].append({\n        'number': room_num,\n        'name': room_name,\n        'area_m2': area_m2\n    })\n\n__result__ = result"
+  },
+  {
+    "id": "doors_schedule",
+    "name": "Спецификация дверей",
+    "description": "Список всех дверей с маркой, уровнем, типом и размерами (ширина x высота)",
+    "category": "READ",
+    "tags": ["doors", "schedule", "mark", "type", "двери", "спецификация"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = list(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Doors).WhereElementIsNotElementType().ToElements())\n\nresult = []\nfor elem in collector:\n    mark_param = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n    mark = mark_param.AsString() if mark_param else ''\n\n    level_param = elem.LookupParameter('Level')\n    level = level_param.AsValueString() if level_param else ''\n\n    elem_type = doc.GetElement(elem.GetTypeId())\n    type_name = getattr(elem_type, 'Name', '') if elem_type else ''\n\n    width_param = elem.get_Parameter(BuiltInParameter.DOOR_WIDTH)\n    height_param = elem.get_Parameter(BuiltInParameter.DOOR_HEIGHT)\n    width_mm = int(round(width_param.AsDouble() * 304.8)) if width_param else 0\n    height_mm = int(round(height_param.AsDouble() * 304.8)) if height_param else 0\n    size_str = '{0}x{1}'.format(width_mm, height_mm)\n\n    result.append({\n        'mark': mark,\n        'level': level,\n        'type': type_name,\n        'size': size_str\n    })\n\nresult.sort(key=lambda x: x['mark'])\n__result__ = result"
+  },
+  {
+    "id": "windows_schedule",
+    "name": "Спецификация окон",
+    "description": "Список всех окон с маркой, уровнем и типом",
+    "category": "READ",
+    "tags": ["windows", "schedule", "mark", "type", "окна", "спецификация"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = list(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Windows).WhereElementIsNotElementType().ToElements())\n\nresult = []\nfor elem in collector:\n    mark_param = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n    mark = mark_param.AsString() if mark_param else ''\n\n    level_param = elem.LookupParameter('Level')\n    level = level_param.AsValueString() if level_param else ''\n\n    elem_type = doc.GetElement(elem.GetTypeId())\n    type_name = getattr(elem_type, 'Name', '') if elem_type else ''\n\n    width_param = elem.get_Parameter(BuiltInParameter.WINDOW_WIDTH)\n    height_param = elem.get_Parameter(BuiltInParameter.WINDOW_HEIGHT)\n    width_mm = int(round(width_param.AsDouble() * 304.8)) if width_param else 0\n    height_mm = int(round(height_param.AsDouble() * 304.8)) if height_param else 0\n    size_str = '{0}x{1}'.format(width_mm, height_mm)\n\n    result.append({\n        'mark': mark,\n        'level': level,\n        'type': type_name,\n        'size': size_str\n    })\n\nresult.sort(key=lambda x: x['mark'])\n__result__ = result"
+  },
+  {
+    "id": "walls_by_type",
+    "name": "Стены по типам с суммарной длиной",
+    "description": "Группировка стен по типу с подсчётом суммарной длины в метрах",
+    "category": "READ",
+    "tags": ["walls", "type", "length", "стены", "тип", "длина", "аналитика"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = list(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Walls).WhereElementIsNotElementType().ToElements())\n\nresult = {}\nfor elem in collector:\n    elem_type = doc.GetElement(elem.GetTypeId())\n    type_name = getattr(elem_type, 'Name', 'Unknown') if elem_type else 'Unknown'\n\n    length_param = elem.get_Parameter(BuiltInParameter.CURVE_ELEM_LENGTH)\n    length_m = length_param.AsDouble() * 0.3048 if length_param else 0.0\n\n    if type_name not in result:\n        result[type_name] = {'count': 0, 'total_length_m': 0.0}\n    result[type_name]['count'] += 1\n    result[type_name]['total_length_m'] += length_m\n\n# Round\nfor k in result:\n    result[k]['total_length_m'] = round(result[k]['total_length_m'], 2)\n\n__result__ = result"
+  },
+  {
+    "id": "copy_parameter_value",
+    "name": "Скопировать значение параметра A в параметр B",
+    "description": "Для всех элементов указанной категории копирует значение из параметра source_param в параметр target_param",
+    "category": "WRITE",
+    "tags": ["copy", "parameter", "bulk", "параметр", "копировать", "перенос"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncategory = '{category}'\nsource_param = '{source_param}'\ntarget_param = '{target_param}'\n\ncollector = list(FilteredElementCollector(doc).OfCategory(getattr(BuiltInCategory, 'OST_' + category)).WhereElementIsNotElementType().ToElements())\n\ncount = 0\nerrors = []\n\nwith Transaction(doc, 'Copy parameter value') as t:\n    t.Start()\n    for elem in collector:\n        src = elem.LookupParameter(source_param)\n        dst = elem.LookupParameter(target_param)\n        if src is None or dst is None or dst.IsReadOnly:\n            continue\n        try:\n            if src.StorageType == StorageType.String:\n                val = src.AsString() or ''\n                dst.Set(val)\n            elif src.StorageType == StorageType.Double:\n                dst.Set(src.AsDouble())\n            elif src.StorageType == StorageType.Integer:\n                dst.Set(src.AsInteger())\n            count += 1\n        except Exception as ex:\n            errors.append(str(ex))\n    t.Commit()\n\n__result__ = {'updated': count, 'errors': len(errors)}"
+  },
+  {
+    "id": "count_by_level",
+    "name": "Количество элементов категории по уровням",
+    "description": "Подсчитывает количество элементов указанной категории на каждом уровне проекта",
+    "category": "READ",
+    "tags": ["count", "level", "category", "количество", "уровень", "статистика"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncategory = '{category}'\n\ncollector = list(FilteredElementCollector(doc).OfCategory(getattr(BuiltInCategory, 'OST_' + category)).WhereElementIsNotElementType().ToElements())\n\nresult = {}\nfor elem in collector:\n    level_param = elem.LookupParameter('Level')\n    if level_param:\n        level_name = level_param.AsValueString() or 'Без уровня'\n    else:\n        level_id = elem.LevelId\n        if level_id and level_id != ElementId.InvalidElementId:\n            level_elem = doc.GetElement(level_id)\n            level_name = getattr(level_elem, 'Name', 'Без уровня') if level_elem else 'Без уровня'\n        else:\n            level_name = 'Без уровня'\n    result[level_name] = result.get(level_name, 0) + 1\n\n__result__ = result"
+  },
+  {
+    "id": "find_duplicates_by_mark",
+    "name": "Найти дубликаты по параметру Mark",
+    "description": "Находит элементы категории с одинаковым значением параметра Mark (потенциальные дубликаты маркировки)",
+    "category": "Проверки",
+    "tags": ["duplicates", "mark", "check", "дубликаты", "марка", "проверка"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncategory = '{category}'\n\ncollector = list(FilteredElementCollector(doc).OfCategory(getattr(BuiltInCategory, 'OST_' + category)).WhereElementIsNotElementType().ToElements())\n\nmarks = {}\nfor elem in collector:\n    mark_param = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n    if mark_param is None:\n        continue\n    mark_val = mark_param.AsString()\n    if not mark_val or mark_val.strip() == '':\n        continue\n    if mark_val not in marks:\n        marks[mark_val] = []\n    marks[mark_val].append(elem.Id.IntegerValue)\n\nduplicates = {k: v for k, v in marks.items() if len(v) > 1}\n\nresult = []\nfor mark_val, ids in duplicates.items():\n    result.append({'mark': mark_val, 'element_ids': ids, 'count': len(ids)})\n\nresult.sort(key=lambda x: x['mark'])\n__result__ = result"
+  },
+  {
+    "id": "elements_without_mark",
+    "name": "Элементы без маркировки",
+    "description": "Находит все элементы указанной категории, у которых не заполнен параметр Mark",
+    "category": "Проверки",
+    "tags": ["mark", "missing", "check", "марка", "без маркировки", "проверка"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncategory = '{category}'\n\ncollector = list(FilteredElementCollector(doc).OfCategory(getattr(BuiltInCategory, 'OST_' + category)).WhereElementIsNotElementType().ToElements())\n\nresult = []\nfor elem in collector:\n    mark_param = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n    if mark_param is None or not mark_param.AsString() or mark_param.AsString().strip() == '':\n        level_param = elem.LookupParameter('Level')\n        level_name = level_param.AsValueString() if level_param else ''\n\n        elem_type = doc.GetElement(elem.GetTypeId())\n        type_name = getattr(elem_type, 'Name', '') if elem_type else ''\n\n        result.append({\n            'id': elem.Id.IntegerValue,\n            'type': type_name,\n            'level': level_name\n        })\n\n__result__ = {'count': len(result), 'elements': result}"
+  },
+  {
+    "id": "area_by_category",
+    "name": "Площадь элементов по категориям в м²",
+    "description": "Суммирует площадь элементов для категорий: Walls, Floors, Rooms, Ceilings — результат в м²",
+    "category": "READ",
+    "tags": ["area", "category", "walls", "floors", "rooms", "площадь", "аналитика"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\nFT2_TO_M2 = 0.092903\n\ncat_map = {\n    'Walls': (BuiltInCategory.OST_Walls, BuiltInParameter.HOST_AREA_COMPUTED),\n    'Floors': (BuiltInCategory.OST_Floors, BuiltInParameter.HOST_AREA_COMPUTED),\n    'Rooms': (BuiltInCategory.OST_Rooms, BuiltInParameter.ROOM_AREA),\n    'Ceilings': (BuiltInCategory.OST_Ceilings, BuiltInParameter.HOST_AREA_COMPUTED)\n}\n\nresult = {}\nfor cat_name, (bic, bip) in cat_map.items():\n    try:\n        elems = list(FilteredElementCollector(doc).OfCategory(bic).WhereElementIsNotElementType().ToElements())\n        total = 0.0\n        for elem in elems:\n            p = elem.get_Parameter(bip)\n            if p:\n                total += p.AsDouble() * FT2_TO_M2\n        result[cat_name] = round(total, 2)\n    except Exception:\n        result[cat_name] = None\n\n__result__ = result"
+  },
+  {
+    "id": "check_parameter_range",
+    "name": "Элементы с параметром вне диапазона",
+    "description": "Находит элементы категории, у которых числовой параметр выходит за пределы [min_val, max_val]",
+    "category": "Проверки",
+    "tags": ["check", "range", "parameter", "validation", "проверка", "диапазон", "параметр"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncategory = '{category}'\nparam_name = '{param_name}'\nmin_val = {min_val}\nmax_val = {max_val}\n\ncollector = list(FilteredElementCollector(doc).OfCategory(getattr(BuiltInCategory, 'OST_' + category)).WhereElementIsNotElementType().ToElements())\n\nout_of_range = []\nfor elem in collector:\n    p = elem.LookupParameter(param_name)\n    if p is None:\n        continue\n    if p.StorageType == StorageType.Double:\n        val = p.AsDouble()\n    elif p.StorageType == StorageType.Integer:\n        val = float(p.AsInteger())\n    else:\n        continue\n\n    if val < min_val or val > max_val:\n        mark_param = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n        mark = mark_param.AsString() if mark_param else ''\n        out_of_range.append({\n            'id': elem.Id.IntegerValue,\n            'mark': mark,\n            'value': round(val, 4)\n        })\n\n__result__ = {'count': len(out_of_range), 'elements': out_of_range}"
+  },
+  {
+    "id": "level_summary",
+    "name": "Сводка по конкретному уровню",
+    "description": "Показывает все категории элементов на указанном уровне с количеством каждой",
+    "category": "READ",
+    "tags": ["level", "summary", "categories", "уровень", "сводка", "аналитика"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\nlevel_name = '{level}'\n\n# Найти Level по имени\nlevels = list(FilteredElementCollector(doc).OfClass(Level).ToElements())\ntarget_level = None\nfor lv in levels:\n    if getattr(lv, 'Name', '') == level_name:\n        target_level = lv\n        break\n\nif target_level is None:\n    __result__ = {'error': 'Level not found: ' + level_name}\nelse:\n    all_elems = list(FilteredElementCollector(doc).WhereElementIsNotElementType().ToElements())\n    cat_counts = {}\n    for elem in all_elems:\n        lv_param = elem.LookupParameter('Level')\n        if lv_param and lv_param.AsValueString() == level_name:\n            cat = elem.Category\n            if cat is None:\n                continue\n            cat_name = cat.Name\n            cat_counts[cat_name] = cat_counts.get(cat_name, 0) + 1\n\n    sorted_cats = sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)\n    __result__ = {\n        'level': level_name,\n        'total': sum(cat_counts.values()),\n        'categories': [{'category': k, 'count': v} for k, v in sorted_cats]\n    }"
+  },
+  {
+    "id": "family_instances_list",
+    "name": "Список вхождений семейства по имени",
+    "description": "Находит все экземпляры семейства с указанным именем и возвращает список с уровнем и маркой",
+    "category": "READ",
+    "tags": ["family", "instances", "search", "семейство", "вхождения", "поиск"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\nfamily_name = '{family_name}'\n\ncollector = list(FilteredElementCollector(doc).OfClass(FamilyInstance).ToElements())\n\nresult = []\nfor elem in collector:\n    fam = elem.Symbol.Family if elem.Symbol else None\n    if fam is None:\n        continue\n    fam_name = getattr(fam, 'Name', '')\n    if fam_name != family_name:\n        continue\n\n    mark_param = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n    mark = mark_param.AsString() if mark_param else ''\n\n    level_param = elem.LookupParameter('Level')\n    level = level_param.AsValueString() if level_param else ''\n\n    sym_name = getattr(elem.Symbol, 'Name', '') if elem.Symbol else ''\n\n    result.append({\n        'id': elem.Id.IntegerValue,\n        'type': sym_name,\n        'level': level,\n        'mark': mark\n    })\n\n__result__ = {'family': family_name, 'count': len(result), 'instances': result}"
+  },
+  {
+    "id": "structural_columns_schedule",
+    "name": "Спецификация структурных колонн",
+    "description": "Список несущих колонн с типом сечения, уровнем и маркой",
+    "category": "READ",
+    "tags": ["structural", "columns", "schedule", "колонны", "несущие", "спецификация"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncollector = list(FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_StructuralColumns).WhereElementIsNotElementType().ToElements())\n\nresult = []\nfor elem in collector:\n    mark_param = elem.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)\n    mark = mark_param.AsString() if mark_param else ''\n\n    level_param = elem.LookupParameter('Base Level')\n    if level_param is None:\n        level_param = elem.LookupParameter('Level')\n    level = level_param.AsValueString() if level_param else ''\n\n    elem_type = doc.GetElement(elem.GetTypeId())\n    type_name = getattr(elem_type, 'Name', '') if elem_type else ''\n\n    # Сечение: ширина x высота (если есть)\n    b_param = None\n    h_param = None\n    if elem_type:\n        b_param = elem_type.LookupParameter('b')\n        h_param = elem_type.LookupParameter('h')\n        if b_param is None:\n            b_param = elem_type.LookupParameter('Width')\n        if h_param is None:\n            h_param = elem_type.LookupParameter('Depth')\n\n    b_mm = int(round(b_param.AsDouble() * 304.8)) if b_param else 0\n    h_mm = int(round(h_param.AsDouble() * 304.8)) if h_param else 0\n    section = '{0}x{1}'.format(b_mm, h_mm) if (b_mm and h_mm) else ''\n\n    result.append({\n        'mark': mark,\n        'type': type_name,\n        'section': section,\n        'level': level\n    })\n\nresult.sort(key=lambda x: x['mark'])\n__result__ = {'count': len(result), 'columns': result}"
+  },
+  {
+    "id": "set_bulk_comment",
+    "name": "Задать Comments всем элементам категории",
+    "description": "Устанавливает параметр Comments для всех элементов указанной категории",
+    "category": "WRITE",
+    "tags": ["comments", "bulk", "set", "параметр", "комментарий", "массово"],
+    "code_template": "import clr\nclr.AddReference('RevitAPI')\nfrom Autodesk.Revit.DB import *\n\ncategory = '{category}'\ncomment_value = '{comment_value}'\n\ncollector = list(FilteredElementCollector(doc).OfCategory(getattr(BuiltInCategory, 'OST_' + category)).WhereElementIsNotElementType().ToElements())\n\ncount = 0\nskipped = 0\n\nwith Transaction(doc, 'Set bulk comment') as t:\n    t.Start()\n    for elem in collector:\n        p = elem.get_Parameter(BuiltInParameter.ALL_MODEL_INSTANCE_COMMENTS)\n        if p is None:\n            p = elem.LookupParameter('Comments')\n        if p and not p.IsReadOnly:\n            p.Set(comment_value)\n            count += 1\n        else:\n            skipped += 1\n    t.Commit()\n\n__result__ = {'updated': count, 'skipped': skipped, 'total': len(collector)}"
+  }
+]

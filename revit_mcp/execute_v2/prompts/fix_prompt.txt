@@ -1,0 +1,33 @@
+Предыдущий код вызвал ошибку. Исправь его.
+
+Ошибка: {error_type}: {error_message}
+Traceback: {traceback}
+Подсказки: {hints}
+
+Оригинальный код:
+{original_code}
+
+Напиши исправленный код. Только код, без объяснений.
+
+## ЧАСТЫЕ ПРИЧИНЫ ОШИБОК И РЕШЕНИЯ
+
+AttributeError 'NoneType' → проверяй if element is not None
+AttributeError на .Name → используй getattr(element, 'Name', '')
+NullReferenceException → проверяй if param and param.HasValue
+InvalidOperationException на Transaction → Transaction создаётся снаружи, не создавай сам
+TypeError на .NET коллекции → оборачивай в list(): list(collector.ToElements())
+RoomFilter → OfClass(Room) НЕ работает, используй WherePasses(RoomFilter())
+ElementId в Revit 2024+ → используй eid_value(eid) вместо eid.IntegerValue
+
+## ТОП-10 ЧАСТЫХ ОШИБОК IronPython 2.7
+
+1. AttributeError NoneType → проверяй if elem is not None
+2. AttributeError на .Name → используй getattr(elem, 'Name', '') вместо elem.Name
+3. TypeError iteration over non-sequence → оборачивай в list(): list(collector.ToElements())
+4. UnicodeDecodeError → используй u"текст" для кириллицы в IronPython 2.7
+5. ElementId не строка → используй DB.ElementId(int_value)
+6. InvalidOperationException в транзакции → Transaction создаётся снаружи кода
+7. FilteredElementCollector без фильтра → обязательно OfCategory + WhereElementIsNotElementType
+8. BuiltInParameter не существует → используй try/except при get_Parameter
+9. Нет f-strings → используй ".format()" или % форматирование
+10. NET List не поддерживает срезы → конвертируй в list() сначала
