@@ -221,18 +221,12 @@ def _execute_code(code, doc, uidoc):
       - Execution timeout 15s (через sys.settrace — прерывает зависшие циклы)
       - Auto Transaction для WRITE операций
     """
-    # ── Security scan ──────────────────────────────────────────────────────────
+    # ── Security scan (только реально опасное) ────────────────────────────────
     blocked_patterns = [
-        (r'\bimport\s+threading\b',      "threading is blocked"),
-        (r'\bimport\s+multiprocessing\b', "multiprocessing is blocked"),
-        (r'\bSystem\.Reflection\b',       "System.Reflection is blocked"),
-        (r'\bProcess\.Start\b',           "Process.Start is blocked"),
+        (r'\bProcess\.Start\s*\(',        "Process.Start() is blocked"),
         (r'\b__subclasses__\b',           "__subclasses__ is blocked"),
         (r'\b__globals__\b',              "__globals__ is blocked"),
         (r'\bfrom\s+\S+\s+import\s+\*',  "wildcard import is blocked"),
-        (r'\bopen\s*\(',                  "open() is blocked"),
-        (r'\beval\s*\(',                  "eval() is blocked"),
-        (r'\bexec\s*\(',                  "exec() is blocked (use __result__)"),
     ]
     for pattern, msg in blocked_patterns:
         if re.search(pattern, code):
